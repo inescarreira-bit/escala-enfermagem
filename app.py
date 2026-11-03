@@ -3,10 +3,10 @@ import pandas as pd
 import random
 from datetime import date, timedelta
 
-st.set_page_config(page_title="Escala ULS Leiria - Rigor Total", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="Escala ULS Leiria - Gestão Completa", page_icon="🏥", layout="wide")
 
 st.title("🏥 Gestor de Escalas de Enfermagem - ULS Leiria")
-st.write("Rácios estritos (6M / 6T / 5N), 2 Coordenadores/turno, Proteção de Amamentação, Rotação Legal, Fins de Semana Justos e Regra de Feriados (Dia 1 e Dia 8).")
+st.write("Rácios estritos (6M / 6T / 5N), 2 Coordenadores/turno, Proteção de Amamentação, Rotação Legal, Feriados e Adição de Pessoal por Equipa.")
 
 # ----------------------------------------------------
 # 1. LEGENDA DE TURNOS OFICIAIS (SISQUAL)
@@ -110,12 +110,12 @@ for i in range(dias_totais):
             sabs_doms.append((i, i+1))
 
 # ----------------------------------------------------
-# 4. GESTÃO DE EQUIPAS
+# 4. GESTÃO DE EQUIPAS E ADIÇÃO DE PESSOAL
 # ----------------------------------------------------
-st.subheader("👥 1. Gestão de Equipas e Estatutos")
+st.subheader("👥 1. Gestão de Equipas, Ativação e Adição de Pessoal")
 
-with st.expander("⚙️ Gerir Elementos, Ativar/Inativar", expanded=False):
-    eq_sel = st.selectbox("Equipa:", list(st.session_state["equipas_dados"].keys()))
+with st.expander("⚙️ Gerir Elementos, Alterar Coordenadores, Inativar ou Adicionar Pessoas", expanded=True):
+    eq_sel = st.selectbox("Escolhe a Equipa para gerir:", list(st.session_state["equipas_dados"].keys()))
     membros = st.session_state["equipas_dados"][eq_sel]
     
     novos_membros = []
@@ -129,6 +129,25 @@ with st.expander("⚙️ Gerir Elementos, Ativar/Inativar", expanded=False):
             a_val = st.checkbox("Ativo(a)", value=m["ativo"], key=f"a_{eq_sel}_{idx}")
         novos_membros.append({"nome": n_val, "coordenadora": c_val, "ativo": a_val})
     st.session_state["equipas_dados"][eq_sel] = novos_membros
+
+    st.divider()
+    st.markdown("**➕ Adicionar Novo/a Enfermeiro/a a esta Equipa**")
+    ca1, ca2, ca3 = st.columns([3, 2, 2])
+    with ca1:
+        novo_nome = st.text_input("Nome do Novo Elemento:")
+    with ca2:
+        novo_coord = st.checkbox("É Coordenador/a?")
+    with ca3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        btn_adicionar = st.button("Adicionar à Equipa")
+
+    if btn_adicionar:
+        if novo_nome.strip():
+            st.session_state["equipas_dados"][eq_sel].append({"nome": novo_nome.strip(), "coordenadora": novo_coord, "ativo": True})
+            st.success(f"'{novo_nome.strip()}' adicionado/a com sucesso à **{eq_sel}**!")
+            st.rerun()
+        else:
+            st.error("Por favor, introduz um nome válido.")
 
 info_enfermeiros = {}
 for eq, lista in st.session_state["equipas_dados"].items():
@@ -173,11 +192,11 @@ if st.session_state["bloqueios"]:
             st.rerun()
 
 # ----------------------------------------------------
-# 6. GERADOR DE ESCALA COM REGRA DOS FERIADOS
+# 6. GERADOR DE ESCALA
 # ----------------------------------------------------
 st.divider()
 
-if st.button("🚀 Gerar Escala Final com Regra de Feriados", type="primary"):
+if st.button("🚀 Gerar Escala Final", type="primary"):
     
     escala = {e: [""] * dias_totais for e in todos_enfs}
     
@@ -208,19 +227,12 @@ if st.button("🚀 Gerar Escala Final com Regra de Feriados", type="primary"):
             if escala[e][d_idx] == "":
                 escala[e][d_idx] = PADRAO_ROULEMENT[(d_idx + offset) % len(PADRAO_ROULEMENT)]
 
-    # 4. Garantir Regra dos Feriados (Dia 1 = índice 0 e Dia 8 = índice 7)
-    # Se trabalhar no Dia 1 (índice 0) e o turno for de trabalho, no Dia 8 (índice 7) fica obrigatoriamente de Descanso (D).
-    # E vice-versa para equilibrar.
+    # 4. Regra dos Feriados (Dia 1 = índice 0 e Dia 8 = índice 7)
     if dias_totais >= 8:
         for e in todos_enfs:
             t_dia1 = escala[e][0]
             t_dia8 = escala[e][7]
-            
-            trabalha_dia1 = t_dia1 in ["M59", "T72", "N4"]
-            trabalha_dia8 = t_dia8 in ["M59", "T72", "N4"]
-            
-            if trabalha_dia1 and trabalha_dia8:
-                # Se foi escalado para ambos, o sistema alivia o Dia 8 dando folga
+            if t_dia1 in ["M59", "T72", "N4"] and t_dia8 in ["M59", "T72", "N4"]:
                 escala[e][7] = "D"
 
     for d_idx in range(dias_totais):
@@ -252,7 +264,7 @@ if st.button("🚀 Gerar Escala Final com Regra de Feriados", type="primary"):
     df_escala.insert(0, "Coordenadora", [ "Sim" if info_enfermeiros[e]["coordenadora"] else "Não" for e in df_escala.index ])
     df_escala.insert(0, "Equipa", [ info_enfermeiros[e]["equipa"] for e in df_escala.index ])
 
-    st.subheader("📊 Tabela Completa da Escala (Com Regra de Feriados)")
+    st.subheader("📊 Tabela Completa da Escala de Enfermagem")
     st.dataframe(df_escala, use_container_width=True)
 
     # Validação de Rácios
@@ -292,7 +304,7 @@ if st.button("🚀 Gerar Escala Final com Regra de Feriados", type="primary"):
     st.download_button(
         label="📥 Descarregar Escala em CSV / Excel",
         data=csv,
-        file_name="escala_uls_leiria_feriados.csv",
+        file_name="escala_uls_leiria_completa.csv",
         mime="text/csv"
     )
 
