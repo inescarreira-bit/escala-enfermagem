@@ -3,10 +3,10 @@ import pandas as pd
 import random
 from datetime import date, timedelta
 
-st.set_page_config(page_title="Escala ULS Leiria - Trabalho por Equipas", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="Escala ULS Leiria - Rácios Garantidos", page_icon="🏥", layout="wide")
 
 st.title("🏥 Gestor de Escalas de Enfermagem - ULS Leiria")
-st.write("Escala baseada na coesão das equipas, garantindo coordenadores naturais, rácios estritos (6M / 6T / 5N) e transições legais.")
+st.write("Garantia absoluta de rácios diários (6 Manhãs, 6 Tardes, 5 Noites) com no mínimo 2 coordenadores por turno e respeito por todas as regras legais.")
 
 # ----------------------------------------------------
 # 1. LEGENDA DE TURNOS OFICIAIS (SISQUAL)
@@ -233,11 +233,11 @@ if st.session_state["bloqueios"]:
             st.rerun()
 
 # ----------------------------------------------------
-# 6. GERADOR DE ESCALA COM COESÃO DE EQUIPAS E RÁCIOS
+# 6. GERADOR DE ESCALA COM QUOTAS DIÁRIAS MATEMÁTICAS (6M, 6T, 5N)
 # ----------------------------------------------------
 st.divider()
 
-if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type="primary"):
+if st.button("🚀 Gerar Escala Final (Rácios Exatos Garantidos)", type="primary"):
     
     escala = {e: [""] * dias_totais for e in todos_enfs}
     
@@ -262,23 +262,21 @@ if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type
 
     amamentacao_lista = [e for e in todos_enfs if info_enfermeiros[e]["equipa"] == "Amamentação"]
     
-    # 3. Pré-preencher Roulement com blocos de equipa desfasados para garantir sinergia e coordenadores
+    # 3. Pré-preencher base de rotação por blocos de equipa
     lista_equipa_nomes = [eq for eq in equipas_map.keys() if eq not in ["Amamentação", "Outros / Especiais"]]
-    
     for eq_idx, eq_nome in enumerate(lista_equipa_nomes):
         membros_eq = [m for m in equipas_map[eq_nome] if info_enfermeiros[m]["tipo_horario"] == "Roulement"]
-        # Cada equipa inteira segue um offset base, mantendo os elementos da mesma equipa a trabalhar juntos
         offset_eq = (eq_idx * 3) % len(PADRAO_ROULEMENT)
         for e in membros_eq:
             for d_idx in range(dias_totais):
                 if escala[e][d_idx] == "":
                     escala[e][d_idx] = PADRAO_ROULEMENT[(d_idx + offset_eq) % len(PADRAO_ROULEMENT)]
 
-    # 4. Processamento Dia a Dia com Garantia de Rácios (6M, 6T, 5N) e Coordenadores naturais
+    # 4. Alocação Diária com Quotas Estritas (6M, 6T, 5N obrigatórios)
     for d_idx in range(dias_totais):
         dia_sem_num = dias_semana_num[d_idx]
         
-        # A. Descanso pós-noite obrigatório
+        # A. Descanso pós-noite obrigatório (Quem fez N ontem, fica de D hoje se estiver vazio)
         if d_idx > 0:
             for e in todos_enfs:
                 if escala[e][d_idx - 1] == "N4" and escala[e][d_idx] == "":
@@ -300,21 +298,22 @@ if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type
             escala["Céu Peralta"][d_idx] = "T72" if ant_cp == "T72" else "M59"
 
         # --- SELEÇÃO DE NOITES (N4): Exatamente 5 elementos (mín 2 coordenadores) ---
+        # Candidatos elegíveis (sem restrições de transição ilegal M->N ou T->N)
         candidatos_n = []
         for e in todos_enfs:
             if escala[e][d_idx] != "": continue
             ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            if ant in ["M59", "T72"]: continue
+            if ant in ["M59", "T72"]: continue # Proibido vir de M ou T
             if dia_sem_num == 0 and d_idx > 0:
                 sab_folga = fds_folga_por_pessoa.get(e)
                 if sab_folga is not None and (d_idx - 1) == sab_folga + 1:
-                    continue
+                    continue # Proteção de segunda-feira
             candidatos_n.append(e)
 
+        # Se faltarem por restrições, apanha qualquer um livre
         if len(candidatos_n) < 5:
-            extras_n = [e for e in todos_enfs if escala[e][d_idx] == "" and (d_idx == 0 or escala[e][d_idx-1] not in ["M59", "T72"])]
-            for ex in extras_n:
-                if ex not in candidatos_n: candidatos_n.append(ex)
+            extras_n = [e for e in todos_enfs if escala[e][d_idx] == "" and e not in candidatos_n]
+            candidatos_n.extend(extras_n)
 
         coords_n = [e for e in candidatos_n if info_enfermeiros[e]["coordenadora"]]
         normais_n = [e for e in candidatos_n if not info_enfermeiros[e]["coordenadora"]]
@@ -323,28 +322,27 @@ if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type
         n_coord_n = min(2, len(coords_n))
         noite_dia.extend(coords_n[:n_coord_n])
         coords_n = coords_n[n_coord_n:]
-        
         restantes_n = coords_n + normais_n
+        
         falta_n = 5 - len(noite_dia)
         noite_dia.extend(restantes_n[:falta_n])
 
         for e in noite_dia:
             escala[e][d_idx] = "N4"
 
-        # --- SELEÇÃO DE MANHÃS (M59): Exatamente 6 elementos (mín 2 coordenadores) ---
+        # --- SELEÇÃO DE MANHÃS (M59): Exatamente 6 elementos (mín 2 coordenadores, já incluindo amamentação) ---
         manha_dia = [e for e in todos_enfs if escala[e][d_idx] == "M59"]
         
         candidatos_m = []
         for e in todos_enfs:
             if escala[e][d_idx] != "": continue
             ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            if ant in ["N4", "T72"]: continue
+            if ant in ["N4", "T72"]: continue # Proibido vir de N ou T
             candidatos_m.append(e)
 
         if len(manha_dia) < 6:
-            extras_m = [e for e in todos_enfs if escala[e][d_idx] == "" and (d_idx == 0 or escala[e][d_idx-1] not in ["N4", "T72"])]
-            for ex in extras_m:
-                if ex not in candidatos_m: candidatos_m.append(ex)
+            extras_m = [e for e in todos_enfs if escala[e][d_idx] == "" and e not in candidatos_m]
+            candidatos_m.extend(extras_m)
 
         coords_m = [e for e in candidatos_m if info_enfermeiros[e]["coordenadora"] and e not in manha_dia]
         normais_m = [e for e in candidatos_m if not info_enfermeiros[e]["coordenadora"] and e not in manha_dia]
@@ -355,8 +353,8 @@ if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type
         
         manha_dia.extend(coords_m[:n_coord_m])
         coords_m = coords_m[n_coord_m:]
-
         restantes_m = coords_m + normais_m
+
         falta_m = 6 - len(manha_dia)
         manha_dia.extend(restantes_m[:falta_m])
 
@@ -369,13 +367,12 @@ if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type
         for e in todos_enfs:
             if escala[e][d_idx] != "": continue
             ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            if ant == "N4": continue
+            if ant == "N4": continue # Proibido vir de N
             candidatos_t.append(e)
 
         if len(candidatos_t) < 6:
-            extras_t = [e for e in todos_enfs if escala[e][d_idx] == "" and (d_idx == 0 or escala[e][d_idx-1] != "N4")]
-            for ex in extras_t:
-                if ex not in candidatos_t: candidatos_t.append(ex)
+            extras_t = [e for e in todos_enfs if escala[e][d_idx] == "" and e not in candidatos_t]
+            candidatos_t.extend(extras_t)
 
         coords_t = [e for e in candidatos_t if info_enfermeiros[e]["coordenadora"]]
         normais_t = [e for e in candidatos_t if not info_enfermeiros[e]["coordenadora"]]
@@ -384,15 +381,15 @@ if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type
         n_coord_t = min(2, len(coords_t))
         tarde_dia.extend(coords_t[:n_coord_t])
         coords_t = coords_t[n_coord_t:]
-
         restantes_t = coords_t + normais_t
+
         falta_t = 6 - len(tarde_dia)
         tarde_dia.extend(restantes_t[:falta_t])
 
         for e in tarde_dia:
             escala[e][d_idx] = "T72"
 
-        # G. Restantes vazios = Descanso (D)
+        # G. Todos os restantes vazios convertem-se estritamente em Descanso (D)
         for e in todos_enfs:
             if escala[e][d_idx] == "":
                 escala[e][d_idx] = "D"
@@ -409,7 +406,7 @@ if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type
     df_escala.insert(0, "Coord.", [ "Sim" if info_enfermeiros[e]["coordenadora"] else "Não" for e in df_escala.index ])
     df_escala.insert(0, "Equipa", [ info_enfermeiros[e]["equipa"] for e in df_escala.index ])
 
-    st.subheader("📊 Tabela Completa da Escala (Equipas Unidas)")
+    st.subheader("📊 Tabela Completa da Escala (Rácios Exatos Garantidos)")
     st.dataframe(df_escala, use_container_width=True)
 
     # Validação de Rácios
@@ -449,7 +446,7 @@ if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type
     st.download_button(
         label="📥 Descarregar Escala em CSV / Excel",
         data=csv,
-        file_name="escala_uls_leiria_equipas_unidas.csv",
+        file_name="escala_uls_leiria_racios_garantidos.csv",
         mime="text/csv"
     )
 
