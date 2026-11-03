@@ -3,10 +3,10 @@ import pandas as pd
 import random
 from datetime import date, timedelta
 
-st.set_page_config(page_title="Escala ULS Leiria - Gestão por Equipas", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="Escala ULS Leiria - Trabalho por Equipas", page_icon="🏥", layout="wide")
 
 st.title("🏥 Gestor de Escalas de Enfermagem - ULS Leiria")
-st.write("Sistema completo com rácios estritos (6M / 6T / 5N), coesão de equipas, regras de transição legais, tipos de horário e equidade.")
+st.write("Escala baseada na coesão das equipas, garantindo coordenadores naturais, rácios estritos (6M / 6T / 5N) e transições legais.")
 
 # ----------------------------------------------------
 # 1. LEGENDA DE TURNOS OFICIAIS (SISQUAL)
@@ -233,11 +233,11 @@ if st.session_state["bloqueios"]:
             st.rerun()
 
 # ----------------------------------------------------
-# 6. GERADOR DE ESCALA COM RÁCIOS RIGOROSOS E COESÃO DE EQUIPAS
+# 6. GERADOR DE ESCALA COM COESÃO DE EQUIPAS E RÁCIOS
 # ----------------------------------------------------
 st.divider()
 
-if st.button("🚀 Gerar Escala Final (Rácios Exatos 6M / 6T / 5N)", type="primary"):
+if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type="primary"):
     
     escala = {e: [""] * dias_totais for e in todos_enfs}
     
@@ -261,16 +261,20 @@ if st.button("🚀 Gerar Escala Final (Rácios Exatos 6M / 6T / 5N)", type="prim
                 escala[e][dom_idx] = "D"
 
     amamentacao_lista = [e for e in todos_enfs if info_enfermeiros[e]["equipa"] == "Amamentação"]
-    roulement_lista = [e for e in todos_enfs if info_enfermeiros[e]["tipo_horario"] == "Roulement" and e not in amamentacao_lista]
+    
+    # 3. Pré-preencher Roulement com blocos de equipa desfasados para garantir sinergia e coordenadores
+    lista_equipa_nomes = [eq for eq in equipas_map.keys() if eq not in ["Amamentação", "Outros / Especiais"]]
+    
+    for eq_idx, eq_nome in enumerate(lista_equipa_nomes):
+        membros_eq = [m for m in equipas_map[eq_nome] if info_enfermeiros[m]["tipo_horario"] == "Roulement"]
+        # Cada equipa inteira segue um offset base, mantendo os elementos da mesma equipa a trabalhar juntos
+        offset_eq = (eq_idx * 3) % len(PADRAO_ROULEMENT)
+        for e in membros_eq:
+            for d_idx in range(dias_totais):
+                if escala[e][d_idx] == "":
+                    escala[e][d_idx] = PADRAO_ROULEMENT[(d_idx + offset_eq) % len(PADRAO_ROULEMENT)]
 
-    # 3. Pré-preencher Roulement base desfasado para equidade
-    for idx_r, e in enumerate(roulement_lista):
-        offset = (idx_r * 2) % len(PADRAO_ROULEMENT)
-        for d_idx in range(dias_totais):
-            if escala[e][d_idx] == "":
-                escala[e][d_idx] = PADRAO_ROULEMENT[(d_idx + offset) % len(PADRAO_ROULEMENT)]
-
-    # 4. Processamento Dia a Dia com Controlo Rigoroso de Rácios (6M, 6T, 5N)
+    # 4. Processamento Dia a Dia com Garantia de Rácios (6M, 6T, 5N) e Coordenadores naturais
     for d_idx in range(dias_totais):
         dia_sem_num = dias_semana_num[d_idx]
         
@@ -300,7 +304,7 @@ if st.button("🚀 Gerar Escala Final (Rácios Exatos 6M / 6T / 5N)", type="prim
         for e in todos_enfs:
             if escala[e][d_idx] != "": continue
             ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            if ant in ["M59", "T72"]: continue # Transições proibidas M->N ou T->N
+            if ant in ["M59", "T72"]: continue
             if dia_sem_num == 0 and d_idx > 0:
                 sab_folga = fds_folga_por_pessoa.get(e)
                 if sab_folga is not None and (d_idx - 1) == sab_folga + 1:
@@ -327,140 +331,4 @@ if st.button("🚀 Gerar Escala Final (Rácios Exatos 6M / 6T / 5N)", type="prim
         for e in noite_dia:
             escala[e][d_idx] = "N4"
 
-        # --- SELEÇÃO DE MANHÃS (M59): Exatamente 6 elementos (mín 2 coordenadores) ---
-        manha_dia = [e for e in todos_enfs if escala[e][d_idx] == "M59"]
-        
-        candidatos_m = []
-        for e in todos_enfs:
-            if escala[e][d_idx] != "": continue
-            ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            if ant in ["N4", "T72"]: continue # Transições proibidas N->M ou T->M
-            candidatos_m.append(e)
-
-        if len(manha_dia) < 6:
-            extras_m = [e for e in todos_enfs if escala[e][d_idx] == "" and (d_idx == 0 or escala[e][d_idx-1] not in ["N4", "T72"])]
-            for ex in extras_m:
-                if ex not in candidatos_m: candidatos_m.append(ex)
-
-        coords_m = [e for e in candidatos_m if info_enfermeiros[e]["coordenadora"] and e not in manha_dia]
-        normais_m = [e for e in candidatos_m if not info_enfermeiros[e]["coordenadora"] and e not in manha_dia]
-
-        coords_ja_m = sum(1 for e in manha_dia if info_enfermeiros[e]["coordenadora"])
-        coords_nec_m = max(0, 2 - coords_ja_m)
-        n_coord_m = min(coords_nec_m, len(coords_m))
-        
-        manha_dia.extend(coords_m[:n_coord_m])
-        coords_m = coords_m[n_coord_m:]
-
-        restantes_m = coords_m + normais_m
-        falta_m = 6 - len(manha_dia)
-        manha_dia.extend(restantes_m[:falta_m])
-
-        for e in manha_dia:
-            if escala[e][d_idx] == "":
-                escala[e][d_idx] = "M59"
-
-        # --- SELEÇÃO DE TARDES (T72): Exatamente 6 elementos (mín 2 coordenadores) ---
-        candidatos_t = []
-        for e in todos_enfs:
-            if escala[e][d_idx] != "": continue
-            ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            if ant == "N4": continue # Transição proibida N->T
-            candidatos_t.append(e)
-
-        if len(candidatos_t) < 6:
-            extras_t = [e for e in todos_enfs if escala[e][d_idx] == "" and (d_idx == 0 or escala[e][d_idx-1] != "N4")]
-            for ex in extras_t:
-                if ex not in candidatos_t: candidatos_t.append(ex)
-
-        coords_t = [e for e in candidatos_t if info_enfermeiros[e]["coordenadora"]]
-        normais_t = [e for e in candidatos_t if not info_enfermeiros[e]["coordenadora"]]
-
-        tarde_dia = []
-        n_coord_t = min(2, len(coords_t))
-        tarde_dia.extend(coords_t[:n_coord_t])
-        coords_t = coords_t[n_coord_t:]
-
-        restantes_t = coords_t + normais_t
-        falta_t = 6 - len(tarde_dia)
-        tarde_dia.extend(restantes_t[:falta_t])
-
-        for e in tarde_dia:
-            escala[e][d_idx] = "T72"
-
-        # G. Restantes vazios = Descanso (D)
-        for e in todos_enfs:
-            if escala[e][d_idx] == "":
-                escala[e][d_idx] = "D"
-
-    # 5. Regra dos Feriados (Dia 1 e Dia 8)
-    if dias_totais >= 8:
-        for e in todos_enfs:
-            if escala[e][0] in ["M59", "T72", "N4"] and escala[e][7] in ["M59", "T72", "N4"]:
-                escala[e][7] = "D"
-
-    # Construção do DataFrame Final
-    df_escala = pd.DataFrame(escala, index=colunas_dias).T
-    df_escala.insert(0, "Tipo", [ info_enfermeiros[e]["tipo_horario"] for e in df_escala.index ])
-    df_escala.insert(0, "Coord.", [ "Sim" if info_enfermeiros[e]["coordenadora"] else "Não" for e in df_escala.index ])
-    df_escala.insert(0, "Equipa", [ info_enfermeiros[e]["equipa"] for e in df_escala.index ])
-
-    st.subheader("📊 Tabela Completa da Escala (Rigorosamente Validada por Equipa)")
-    st.dataframe(df_escala, use_container_width=True)
-
-    # Validação de Rácios
-    st.divider()
-    st.subheader("📈 Validação Rigorosa de Rácios por Turno")
-    
-    m_c, t_c, n_c = [], [], []
-    cm_c, ct_c, cn_c = [], [], []
-
-    for d_nome in colunas_dias:
-        col = df_escala[d_nome]
-        m_enfs = col[col == "M59"].index
-        t_enfs = col[col == "T72"].index
-        n_enfs = col[col == "N4"].index
-        
-        m_c.append(len(m_enfs))
-        t_c.append(len(t_enfs))
-        n_c.append(len(n_enfs))
-        
-        cm_c.append(sum(1 for e in m_enfs if info_enfermeiros[e]["coordenadora"]))
-        ct_c.append(sum(1 for e in t_enfs if info_enfermeiros[e]["coordenadora"]))
-        cn_c.append(sum(1 for e in n_enfs if info_enfermeiros[e]["coordenadora"]))
-
-    df_validacao = pd.DataFrame({
-        "Manhãs (M) [Obrig: 6]": m_c,
-        "Coordenadores M [Min: 2]": cm_c,
-        "Tardes (T) [Obrig: 6]": t_c,
-        "Coordenadores T [Min: 2]": ct_c,
-        "Noites (N) [Obrig: 5]": n_c,
-        "Coordenadores N [Min: 2]": cn_c,
-    }, index=colunas_dias)
-
-    st.dataframe(df_validacao.T, use_container_width=True)
-
-    # Botão de Exportação
-    csv = df_escala.to_csv().encode('utf-8')
-    st.download_button(
-        label="📥 Descarregar Escala em CSV / Excel",
-        data=csv,
-        file_name="escala_uls_leiria_definitiva.csv",
-        mime="text/csv"
-    )
-
-# ----------------------------------------------------
-# 7. LEGENDA
-# ----------------------------------------------------
-st.divider()
-st.subheader("📖 Legenda de Turnos")
-cl1, cl2 = st.columns(2)
-itens = list(TURNOS_CONFIG.items())
-metade = len(itens) // 2
-
-with cl1:
-    for k, v in itens[:metade]:
-        st.write(f"**{k}**: {v}")
-with cl2:
-    for k, v in itens[metade:]:
-        st.write(f"**{k}**: {v}")
+        # --- SELEÇÃO DE MANHÃS (M59): Exatamente 6 elementos (m
