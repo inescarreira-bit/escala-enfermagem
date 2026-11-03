@@ -128,7 +128,8 @@ with st.expander("⚙️ Gerir Elementos, Ativação, Coordenação e Adicionar 
         with c2:
             c_val = st.checkbox("Coord.", value=m["coordenadora"], key=f"c_{eq_sel}_{idx}")
         with c3:
-            t_val = st.selectbox("Tipo", ["Roulement", "Fixo"], index=0 if m["tipo_horario"]=="Roulement" else 1, key=f"t_{eq_sel}_{idx}")
+            idx_tipo = 0 if m.get("tipo_horario", "Roulement") == "Roulement" else 1
+            t_val = st.selectbox("Tipo", ["Roulement", "Fixo"], index=idx_tipo, key=f"t_{eq_sel}_{idx}")
         with c4:
             a_val = st.checkbox("Ativo(a)", value=m["ativo"], key=f"a_{eq_sel}_{idx}")
         novos_membros.append({"nome": n_val, "coordenadora": c_val, "ativo": a_val, "tipo_horario": t_val})
@@ -163,7 +164,7 @@ for eq, lista in st.session_state["equipas_dados"].items():
             info_enfermeiros[m["nome"]] = {
                 "equipa": eq,
                 "coordenadora": m["coordenadora"],
-                "tipo_horario": m["tipo_horario"]
+                "tipo_horario": m.get("tipo_horario", "Roulement")
             }
 
 todos_enfs = list(info_enfermeiros.keys())
@@ -244,13 +245,13 @@ if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type=
                 if d_nome in st.session_state["bloqueios"][e]:
                     escala[e][d_idx] = st.session_state["bloqueios"][e][d_nome]
 
-    # 2. Atribuir 1 Fim de Semana Completo de Folga por Pessoa (e registar quais fins de semana tiveram folga)
+    # 2. Atribuir 1 Fim de Semana Completo de Folga por Pessoa
     fds_folga_por_pessoa = {}
     if sabs_doms:
         for idx_e, e in enumerate(todos_enfs):
             fds_escolhido = sabs_doms[idx_e % len(sabs_doms)]
             sab_idx, dom_idx = fds_escolhido
-            fds_folga_por_pessoa[e] = sab_idx # Guarda o índice do sábado
+            fds_folga_por_pessoa[e] = sab_idx
             if escala[e][sab_idx] == "":
                 escala[e][sab_idx] = "D"
             if escala[e][dom_idx] == "":
@@ -266,26 +267,18 @@ if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type=
             if escala[e][d_idx] == "":
                 escala[e][d_idx] = PADRAO_ROULEMENT[(d_idx + offset) % len(PADRAO_ROULEMENT)]
 
-    # 4. Processamento Dia a Dia (Cumprimento rigoroso de Rácios, Transições e Feriados)
+    # 4. Processamento Dia a Dia
     for d_idx in range(dias_totais):
         dia_sem_num = dias_semana_num[d_idx]
         
-        # A. Descanso pós-noite obrigatório e regras estritas de transição do dia anterior
+        # A. Descanso pós-noite obrigatório e regras estritas de transição
         if d_idx > 0:
             for e in todos_enfs:
                 ant = escala[e][d_idx - 1]
                 atual = escala[e][d_idx]
-                
                 if atual == "":
                     if ant == "N4":
-                        # A seguir a N só pode vir N ou D
                         escala[e][d_idx] = "D"
-                    elif ant == "T72":
-                        # A seguir a T só pode vir T ou D (Proibido T->M e T->N)
-                        pass
-                    elif ant == "M59":
-                        # A seguir a M pode vir M, T ou D (Proibido M->N)
-                        pass
 
         # B. Amamentação: Máximo 3 de manhã, restante folga D
         am_disp = [e for e in amamentacao_lista if escala[e][d_idx] not in ["L", "Au", "GvR"]]
@@ -307,14 +300,12 @@ if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type=
         for e in todos_enfs:
             if escala[e][d_idx] != "": continue
             ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            # Regra: A seguir a M ou T não pode vir N
             if ant in ["M59", "T72"]: continue
             
-            # Proteção de segunda-feira pós fim de semana de folga
             if dia_sem_num == 0 and d_idx > 0:
                 sab_folga = fds_folga_por_pessoa.get(e)
                 if sab_folga is not None and (d_idx - 1) == sab_folga + 1:
-                    continue # Quem esteve de folga no fim de semana não faz noite na segunda
+                    continue
             candidatos_n.append(e)
 
         if len(candidatos_n) < 5:
@@ -344,7 +335,6 @@ if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type=
         for e in todos_enfs:
             if escala[e][d_idx] != "": continue
             ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            # Regra: A seguir a N ou T não pode vir M (Proibido T->M)
             if ant in ["N4", "T72"]: continue
             candidatos_m.append(e)
 
@@ -376,7 +366,6 @@ if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type=
         for e in todos_enfs:
             if escala[e][d_idx] != "": continue
             ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            # Regra: A seguir a N não pode vir T
             if ant == "N4": continue
             candidatos_t.append(e)
 
