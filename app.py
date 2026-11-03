@@ -28,8 +28,8 @@ def calcular_horas_trabalho_avancado(data_inicio_str, data_fim_str, horas_semana
     # 4. Iteração dia a dia no período selecionado
     data_atual = data_inicio
     while data_atual <= data_fim:
-        # LINHA CORRIGIDA COM OS DIAS DO FIM DE SEMANA [5, 6]
-        if data_atual.weekday() in:
+        # LINHA CORRIGIDA: Sábado é 5 e Domingo é 6. Se for maior ou igual a 5, é fim de semana.
+        if data_atual.weekday() >= 5:
             dias_fim_semana += 1
         elif data_atual in feriados_oficiais:
             # Guarda o nome do feriado encontrado para o relatório
