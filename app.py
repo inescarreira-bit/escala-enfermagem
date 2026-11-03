@@ -142,4 +142,207 @@ with st.expander("⚙️ Gerir Elementos, Ativar/Inativar e Trocar Regimes", exp
         novo_nome = st.text_input("Nome do Enfermeiro/a:")
     with ca2:
         novo_coord = st.checkbox("É Coordenador/a?")
-    with ca
+    with ca3:
+        novo_regime = st.selectbox("Regime:", ["Roulement", "Amamentação", "Manhã Preferencial", "Apenas Manhãs"])
+    
+    if st.button("Adicionar a esta equipa"):
+        if novo_nome:
+            st.session_state["equipas_dados"][eq_sel].append({"nome": novo_nome, "coordenadora": novo_coord, "regime": novo_regime, "ativo": True})
+            st.success(f"{novo_nome} adicionado/a à {eq_sel}!")
+            st.rerun()
+
+# Lista de enfermeiros ativos e dicionário de atributos
+todos_enfermeiros_ativos = []
+info_enfermeiros = {}
+
+for eq, lista in st.session_state["equipas_dados"].items():
+    for m in lista:
+        if m["ativo"]:
+            todos_enfermeiros_ativos.append(m["nome"])
+            info_enfermeiros[m["nome"]] = {
+                "equipa": eq,
+                "coordenadora": m["coordenadora"],
+                "regime": m["regime"]
+            }
+
+# Metas de turnos padrão por pessoa
+for e in todos_enfermeiros_ativos:
+    if e not in st.session_state["metas_turnos"]:
+        st.session_state["metas_turnos"][e] = 18
+
+with st.expander("🎯 Definir Meta de Turnos Mensais por Pessoa"):
+    cols_meta = st.columns(3)
+    for i, e in enumerate(todos_enfermeiros_ativos):
+        with cols_meta[i % 3]:
+            st.session_state["metas_turnos"][e] = st.number_input(f"Meta de Turnos: {e}", min_value=0, max_value=dias_totais, value=st.session_state["metas_turnos"][e], key=f"m_{e}")
+
+# ----------------------------------------------------
+# 5. BLOQUEIOS DE DIAS E RESTRIÇÕES ESPECÍFICAS
+# ----------------------------------------------------
+st.divider()
+st.subheader("📌 2. Bloqueio de Dias e Pedidos Específicos")
+
+cb1, cb2, cb3 = st.columns(3)
+with cb1:
+    enf_sel = st.selectbox("Enfermeiro/a:", todos_enfermeiros_ativos)
+with cb2:
+    dia_sel = st.selectbox("Dia do Calendário:", colunas_dias)
+with cb3:
+    estado_sel = st.selectbox("Turno / Pedido Fixo:", ["D (Descanso/Folga)", "L (Férias)", "M59 (Manhã)", "T72 (Tarde)", "N4 (Noite)", "Au (Ausência)"])
+
+sigla_estado = estado_sel.split(" ")[0]
+
+if st.button("➕ Fixar Restrição/Pedido"):
+    if enf_sel not in st.session_state["bloqueios"]:
+        st.session_state["bloqueios"][enf_sel] = {}
+    st.session_state["bloqueios"][enf_sel][dia_sel] = sigla_estado
+    st.success(f"Fixado: {enf_sel} -> {sigla_estado} no dia {dia_sel}.")
+
+if st.session_state["bloqueios"]:
+    with st.expander("Ver Restrições Definidas Ativas"):
+        for e, rest in st.session_state["bloqueios"].items():
+            for d, t in rest.items():
+                st.text(f"• {e} ({d}) -> {t}")
+        if st.button("Limpar Restrições"):
+            st.session_state["bloqueios"] = {}
+            st.rerun()
+
+# ----------------------------------------------------
+# 6. GERADOR AUTOMÁTICO DE ESCALA
+# ----------------------------------------------------
+st.divider()
+
+if st.button("🚀 Gerar Escala com Rácios (6M / 6T / 5N) e Coordenadores", type="primary"):
+    
+    escala = {e: [""] * dias_totais for e in todos_enfermeiros_ativos}
+    turnos_contagem = {e: 0 for e in todos_enfermeiros_ativos}
+    
+    # Passagem 1: Aplicar Bloqueios Manuais
+    for e in todos_enfermeiros_ativos:
+        if e in st.session_state["bloqueios"]:
+            for d_idx, d_nome in enumerate(colunas_dias):
+                if d_nome in st.session_state["bloqueios"][e]:
+                    escala[e][d_idx] = st.session_state["bloqueios"][e][d_nome]
+                    if escala[e][d_idx] not in ["D", "L", "Au", "GvR"]:
+                        turnos_contagem[e] += 1
+
+    # Passagem 2: Céu Peralta (Muito mais M que T)
+    if "Céu Peralta" in escala:
+        for d_idx in range(dias_totais):
+            if escala["Céu Peralta"][d_idx] == "":
+                if turnos_contagem["Céu Peralta"] < st.session_state["metas_turnos"]["Céu Peralta"]:
+                    # 80% Manhãs, 20% Tardes
+                    escala["Céu Peralta"][d_idx] = "M59" if random.random() < 0.80 else "T72"
+                    turnos_contagem["Céu Peralta"] += 1
+                else:
+                    escala["Céu Peralta"][d_idx] = "D"
+
+    # Passagem 3: Amamentação (Máximo 3 por Manhã)
+    amamentacao_enfermeiros = [e for e in todos_enfermeiros_ativos if info_enfermeiros[e]["regime"] == "Amamentação"]
+    
+    for d_idx in range(dias_totais):
+        am_no_dia = 0
+        random.shuffle(amamentacao_enfermeiros)
+        for e in amamentacao_enfermeiros:
+            if escala[e][d_idx] == "":
+                if am_no_dia < 3 and turnos_contagem[e] < st.session_state["metas_turnos"][e]:
+                    escala[e][d_idx] = "M59"
+                    turnos_contagem[e] += 1
+                    am_no_dia += 1
+                else:
+                    escala[e][d_idx] = "D"
+
+    # Passagem 4: Preenchimento do Roulement (M M T T F D N N F F)
+    roulement_enfermeiros = [e for e in todos_enfermeiros_ativos if info_enfermeiros[e]["regime"] == "Roulement"]
+    
+    for e_idx, e in enumerate(roulement_enfermeiros):
+        offset = (e_idx * 2) % len(PADRAO_ROULEMENT)
+        
+        for d_idx in range(dias_totais):
+            if escala[e][d_idx] == "":
+                # Regra de Segurança Pós-Noite
+                if d_idx > 0 and escala[e][d_idx-1] == "N4":
+                    escala[e][d_idx] = "D"
+                elif turnos_contagem[e] < st.session_state["metas_turnos"][e]:
+                    turno_sugerido = PADRAO_ROULEMENT[(d_idx + offset) % len(PADRAO_ROULEMENT)]
+                    escala[e][d_idx] = turno_sugerido
+                    if turno_sugerido not in ["D", "L"]:
+                        turnos_contagem[e] += 1
+                else:
+                    escala[e][d_idx] = "D"
+
+    # Preencher restantes vazios com Folga
+    for e in todos_enfermeiros_ativos:
+        for d_idx in range(dias_totais):
+            if escala[e][d_idx] == "":
+                escala[e][d_idx] = "D"
+
+    # Construção da Tabela Final
+    df_escala = pd.DataFrame(escala, index=colunas_dias).T
+    
+    # Adicionar colunas informativas de Equipa e Coordenadora
+    df_escala.insert(0, "Coordenadora", [ "Sim" if info_enfermeiros[e]["coordenadora"] else "Não" for e in df_escala.index ])
+    df_escala.insert(0, "Equipa", [ info_enfermeiros[e]["equipa"] for e in df_escala.index ])
+
+    st.subheader("📊 Tabela Completa da Escala de Enfermagem")
+    st.dataframe(df_escala, use_container_width=True)
+
+    # ----------------------------------------------------
+    # 7. ANÁLISE DE RÁCIOS E COORDENADORES POR TURNO
+    # ----------------------------------------------------
+    st.divider()
+    st.subheader("📈 Validação de Rácios e Coordenadores por Turno")
+    
+    m_counts, t_counts, n_counts = [], [], []
+    coord_m, coord_t, coord_n = [], [], []
+
+    for d_nome in colunas_dias:
+        col = df_escala[d_nome]
+        
+        m_enfs = col[col == "M59"].index
+        t_enfs = col[col == "T72"].index
+        n_enfs = col[col == "N4"].index
+        
+        m_counts.append(len(m_enfs))
+        t_counts.append(len(t_enfs))
+        n_counts.append(len(n_enfs))
+        
+        coord_m.append(sum(1 for e in m_enfs if info_enfermeiros[e]["coordenadora"]))
+        coord_t.append(sum(1 for e in t_enfs if info_enfermeiros[e]["coordenadora"]))
+        coord_n.append(sum(1 for e in n_enfs if info_enfermeiros[e]["coordenadora"]))
+
+    df_stats = pd.DataFrame({
+        "Manhãs (M) [Meta: 6]": m_counts,
+        "Coordenadores M [Min: 2]": coord_m,
+        "Tardes (T) [Meta: 6]": t_counts,
+        "Coordenadores T [Min: 2]": coord_t,
+        "Noites (N) [Meta: 5]": n_counts,
+        "Coordenadores N [Min: 2]": coord_n,
+    }, index=colunas_dias)
+
+    st.dataframe(df_stats.T, use_container_width=True)
+
+    # Botão para Descarregar
+    csv = df_escala.to_csv().encode('utf-8')
+    st.download_button(
+        label="📥 Descarregar Escala em CSV / Excel",
+        data=csv,
+        file_name="escala_uls_leiria_equipas.csv",
+        mime="text/csv"
+    )
+
+# ----------------------------------------------------
+# 8. LEGENDA
+# ----------------------------------------------------
+st.divider()
+st.subheader("📖 Legenda de Turnos")
+cl1, cl2 = st.columns(2)
+itens = list(TURNOS_CONFIG.items())
+metade = len(itens) // 2
+
+with cl1:
+    for k, v in itens[:metade]:
+        st.write(f"**{k}**: {v}")
+with cl2:
+    for k, v in itens[metade:]:
+        st.write(f"**{k}**: {v}")
