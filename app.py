@@ -331,4 +331,140 @@ if st.button("🚀 Gerar Escala Final (Equipas Unidas + Rácios 6M/6T/5N)", type
         for e in noite_dia:
             escala[e][d_idx] = "N4"
 
-        # --- SELEÇÃO DE MANHÃS (M59): Exatamente 6 elementos (m
+        # --- SELEÇÃO DE MANHÃS (M59): Exatamente 6 elementos (mín 2 coordenadores) ---
+        manha_dia = [e for e in todos_enfs if escala[e][d_idx] == "M59"]
+        
+        candidatos_m = []
+        for e in todos_enfs:
+            if escala[e][d_idx] != "": continue
+            ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
+            if ant in ["N4", "T72"]: continue
+            candidatos_m.append(e)
+
+        if len(manha_dia) < 6:
+            extras_m = [e for e in todos_enfs if escala[e][d_idx] == "" and (d_idx == 0 or escala[e][d_idx-1] not in ["N4", "T72"])]
+            for ex in extras_m:
+                if ex not in candidatos_m: candidatos_m.append(ex)
+
+        coords_m = [e for e in candidatos_m if info_enfermeiros[e]["coordenadora"] and e not in manha_dia]
+        normais_m = [e for e in candidatos_m if not info_enfermeiros[e]["coordenadora"] and e not in manha_dia]
+
+        coords_ja_m = sum(1 for e in manha_dia if info_enfermeiros[e]["coordenadora"])
+        coords_nec_m = max(0, 2 - coords_ja_m)
+        n_coord_m = min(coords_nec_m, len(coords_m))
+        
+        manha_dia.extend(coords_m[:n_coord_m])
+        coords_m = coords_m[n_coord_m:]
+
+        restantes_m = coords_m + normais_m
+        falta_m = 6 - len(manha_dia)
+        manha_dia.extend(restantes_m[:falta_m])
+
+        for e in manha_dia:
+            if escala[e][d_idx] == "":
+                escala[e][d_idx] = "M59"
+
+        # --- SELEÇÃO DE TARDES (T72): Exatamente 6 elementos (mín 2 coordenadores) ---
+        candidatos_t = []
+        for e in todos_enfs:
+            if escala[e][d_idx] != "": continue
+            ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
+            if ant == "N4": continue
+            candidatos_t.append(e)
+
+        if len(candidatos_t) < 6:
+            extras_t = [e for e in todos_enfs if escala[e][d_idx] == "" and (d_idx == 0 or escala[e][d_idx-1] != "N4")]
+            for ex in extras_t:
+                if ex not in candidatos_t: candidatos_t.append(ex)
+
+        coords_t = [e for e in candidatos_t if info_enfermeiros[e]["coordenadora"]]
+        normais_t = [e for e in candidatos_t if not info_enfermeiros[e]["coordenadora"]]
+
+        tarde_dia = []
+        n_coord_t = min(2, len(coords_t))
+        tarde_dia.extend(coords_t[:n_coord_t])
+        coords_t = coords_t[n_coord_t:]
+
+        restantes_t = coords_t + normais_t
+        falta_t = 6 - len(tarde_dia)
+        tarde_dia.extend(restantes_t[:falta_t])
+
+        for e in tarde_dia:
+            escala[e][d_idx] = "T72"
+
+        # G. Restantes vazios = Descanso (D)
+        for e in todos_enfs:
+            if escala[e][d_idx] == "":
+                escala[e][d_idx] = "D"
+
+    # 5. Regra dos Feriados (Dia 1 e Dia 8)
+    if dias_totais >= 8:
+        for e in todos_enfs:
+            if escala[e][0] in ["M59", "T72", "N4"] and escala[e][7] in ["M59", "T72", "N4"]:
+                escala[e][7] = "D"
+
+    # Construção do DataFrame Final
+    df_escala = pd.DataFrame(escala, index=colunas_dias).T
+    df_escala.insert(0, "Tipo", [ info_enfermeiros[e]["tipo_horario"] for e in df_escala.index ])
+    df_escala.insert(0, "Coord.", [ "Sim" if info_enfermeiros[e]["coordenadora"] else "Não" for e in df_escala.index ])
+    df_escala.insert(0, "Equipa", [ info_enfermeiros[e]["equipa"] for e in df_escala.index ])
+
+    st.subheader("📊 Tabela Completa da Escala (Equipas Unidas)")
+    st.dataframe(df_escala, use_container_width=True)
+
+    # Validação de Rácios
+    st.divider()
+    st.subheader("📈 Validação Rigorosa de Rácios por Turno")
+    
+    m_c, t_c, n_c = [], [], []
+    cm_c, ct_c, cn_c = [], [], []
+
+    for d_nome in colunas_dias:
+        col = df_escala[d_nome]
+        m_enfs = col[col == "M59"].index
+        t_enfs = col[col == "T72"].index
+        n_enfs = col[col == "N4"].index
+        
+        m_c.append(len(m_enfs))
+        t_c.append(len(t_enfs))
+        n_c.append(len(n_enfs))
+        
+        cm_c.append(sum(1 for e in m_enfs if info_enfermeiros[e]["coordenadora"]))
+        ct_c.append(sum(1 for e in t_enfs if info_enfermeiros[e]["coordenadora"]))
+        cn_c.append(sum(1 for e in n_enfs if info_enfermeiros[e]["coordenadora"]))
+
+    df_validacao = pd.DataFrame({
+        "Manhãs (M) [Obrig: 6]": m_c,
+        "Coordenadores M [Min: 2]": cm_c,
+        "Tardes (T) [Obrig: 6]": t_c,
+        "Coordenadores T [Min: 2]": ct_c,
+        "Noites (N) [Obrig: 5]": n_c,
+        "Coordenadores N [Min: 2]": cn_c,
+    }, index=colunas_dias)
+
+    st.dataframe(df_validacao.T, use_container_width=True)
+
+    # Botão de Exportação
+    csv = df_escala.to_csv().encode('utf-8')
+    st.download_button(
+        label="📥 Descarregar Escala em CSV / Excel",
+        data=csv,
+        file_name="escala_uls_leiria_equipas_unidas.csv",
+        mime="text/csv"
+    )
+
+# ----------------------------------------------------
+# 7. LEGENDA
+# ----------------------------------------------------
+st.divider()
+st.subheader("📖 Legenda de Turnos")
+cl1, cl2 = st.columns(2)
+itens = list(TURNOS_CONFIG.items())
+metade = len(itens) // 2
+
+with cl1:
+    for k, v in itens[:metade]:
+        st.write(f"**{k}**: {v}")
+with cl2:
+    for k, v in itens[metade:]:
+        st.write(f"**{k}**: {v}")
