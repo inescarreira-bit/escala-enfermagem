@@ -3,10 +3,10 @@ import pandas as pd
 import random
 from datetime import date, timedelta
 
-st.set_page_config(page_title="Escala ULS Leiria - Rotação Coerente", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="Escala ULS Leiria - Rigor Legal Absoluto", page_icon="🏥", layout="wide")
 
 st.title("🏥 Gestor de Escalas de Enfermagem - ULS Leiria")
-st.write("Escala com linhas individuais coerentes e contínuas, rotação legal, rácios equilibrados, Coordenadores, Amamentação e Feriados.")
+st.write("Escala com proibição estrita de transição Tarde-Noite (T → N), rácios diários rigorosos (6M / 6T / 5N), Coordenadores, Amamentação e Feriados.")
 
 # ----------------------------------------------------
 # 1. LEGENDA DE TURNOS OFICIAIS (SISQUAL)
@@ -225,11 +225,11 @@ if st.session_state["bloqueios"]:
             st.rerun()
 
 # ----------------------------------------------------
-# 6. GERADOR DE ESCALA COM ROTAÇÃO CONTÍNUA E COERENTE
+# 6. GERADOR DE ESCALA COM PROTEÇÃO T → N E RÁCIOS
 # ----------------------------------------------------
 st.divider()
 
-if st.button("🚀 Gerar Escala Final (Linhas Coerentes e Justas)", type="primary"):
+if st.button("🚀 Gerar Escala Final (Anti T→N e Coerente)", type="primary"):
     
     escala = {e: [""] * dias_totais for e in todos_enfs}
     
@@ -254,14 +254,13 @@ if st.button("🚀 Gerar Escala Final (Linhas Coerentes e Justas)", type="primar
     roulement_lista = [e for e in todos_enfs if e not in amamentacao_lista and e != "Céu Peralta"]
 
     # 3. Atribuir a rotação contínua base (M-M-T-T-D-D-N-N-D-D) desfasada por pessoa
-    # Isto garante que cada enfermeiro tem uma progressão perfeitamente lógica e natural na sua linha
     for idx_r, e in enumerate(roulement_lista):
         offset = (idx_r * 2) % len(PADRAO_ROULEMENT)
         for d_idx in range(dias_totais):
             if escala[e][d_idx] == "":
                 escala[e][d_idx] = PADRAO_ROULEMENT[(d_idx + offset) % len(PADRAO_ROULEMENT)]
 
-    # 4. Céu Peralta (Prefere Manhãs/Tardes de forma equilibrada)
+    # 4. Céu Peralta
     if "Céu Peralta" in todos_enfs:
         for d_idx in range(dias_totais):
             if escala["Céu Peralta"][d_idx] == "":
@@ -270,7 +269,6 @@ if st.button("🚀 Gerar Escala Final (Linhas Coerentes e Justas)", type="primar
     # 5. Amamentação: Máximo 3 de manhã por dia, restante folga D
     for d_idx in range(dias_totais):
         am_disp = [e for e in amamentacao_lista if escala[e][d_idx] not in ["L", "Au", "GvR"]]
-        # Garantir que as de amamentação apenas fazem M59 ou D
         random.shuffle(am_disp)
         am_trabalham = am_disp[:3]
         am_folgam = am_disp[3:]
@@ -279,29 +277,32 @@ if st.button("🚀 Gerar Escala Final (Linhas Coerentes e Justas)", type="primar
         for e in am_folgam:
             escala[e][d_idx] = "D"
 
-    # 6. Validação diária de rácios e coordenadores (6M, 6T, 5N, min 2 coordenadores)
+    # 6. Validação diária de restrições legais absolutas (Descanso Pós-Noite e Proibição T → N)
     for d_idx in range(dias_totais):
         dia_sem_num = dias_semana_num[d_idx]
         
-        # Garantir descanso obrigatório pós-noite do dia anterior
         if d_idx > 0:
             for e in todos_enfs:
-                if escala[e][d_idx - 1] == "N4" and escala[e][d_idx] != "L":
+                # A. Descanso obrigatório pós-noite
+                if escala[e][d_idx - 1] == "N4" and escala[e][d_idx] not in ["L", "Au"]:
                     escala[e][d_idx] = "D"
+                
+                # B. PROIBIÇÃO ABSOLUTA DE TARDE PARA NOITE (T → N)
+                if escala[e][d_idx - 1] == "T72" and escala[e][d_idx] == "N4":
+                    escala[e][d_idx] = "D" # Força descanso se houver conflito de transição
 
-        # Recolher atribuições atuais do dia
-        m_atrib = [e for e in todos_enfs if escala[e][d_idx] == "M59"]
-        t_atrib = [e for e in todos_enfs if escala[e][d_idx] == "T72"]
+        # C. Validação de Coordenadores nas Noites (Mínimo 2)
         n_atrib = [e for e in todos_enfs if escala[e][d_idx] == "N4"]
-        d_atrib = [e for e in todos_enfs if escala[e][d_idx] == "D"]
-
-        # Ajuste de Coordenadores nas Noites (Mínimo 2)
         coords_n = [e for e in n_atrib if info_enfermeiros[e]["coordenadora"]]
         if len(coords_n) < 2:
+            t_atrib = [e for e in todos_enfs if escala[e][d_idx] == "T72"]
+            d_atrib = [e for e in todos_enfs if escala[e][d_idx] == "D"]
             candidatos_c = [e for e in (t_atrib + d_atrib) if info_enfermeiros[e]["coordenadora"] and e not in amamentacao_lista]
             for c in candidatos_c:
                 if len(coords_n) >= 2: break
-                # Trocar para noite garantindo que não quebra regras
+                # Verificar se o candidato esteve de Tarde ontem (para não violar T->N nele próprio)
+                if d_idx > 0 and escala[c][d_idx - 1] == "T72":
+                    continue
                 escala[c][d_idx] = "N4"
                 coords_n.append(c)
 
@@ -316,7 +317,7 @@ if st.button("🚀 Gerar Escala Final (Linhas Coerentes e Justas)", type="primar
     df_escala.insert(0, "Coordenadora", [ "Sim" if info_enfermeiros[e]["coordenadora"] else "Não" for e in df_escala.index ])
     df_escala.insert(0, "Equipa", [ info_enfermeiros[e]["equipa"] for e in df_escala.index ])
 
-    st.subheader("📊 Tabela Completa da Escala com Rotação Coerente")
+    st.subheader("📊 Tabela Completa da Escala (Sem Transições T→N)")
     st.dataframe(df_escala, use_container_width=True)
 
     # Validação de Rácios
@@ -356,7 +357,7 @@ if st.button("🚀 Gerar Escala Final (Linhas Coerentes e Justas)", type="primar
     st.download_button(
         label="📥 Descarregar Escala em CSV / Excel",
         data=csv,
-        file_name="escala_uls_leiria_coerente.csv",
+        file_name="escala_uls_leiria_sem_transicao_t_n.csv",
         mime="text/csv"
     )
 
