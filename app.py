@@ -1,12 +1,12 @@
-import streamlit as st
+ import streamlit as st
 import pandas as pd
 import random
 from datetime import date, timedelta
 
-st.set_page_config(page_title="Escala ULS Leiria - Gestão Completa", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="Escala ULS Leiria - Gestão por Equipas", page_icon="🏥", layout="wide")
 
 st.title("🏥 Gestor de Escalas de Enfermagem - ULS Leiria")
-st.write("Sistema completo com rácios estritos (6M / 6T / 5N), regras de transição legais, tipos de horário por pessoa, restrições individuais e equidade.")
+st.write("Sistema completo com rácios estritos (6M / 6T / 5N), coesão de equipas, regras de transição legais, tipos de horário e equidade.")
 
 # ----------------------------------------------------
 # 1. LEGENDA DE TURNOS OFICIAIS (SISQUAL)
@@ -156,9 +156,11 @@ with st.expander("⚙️ Gerir Elementos, Ativação, Coordenação e Adicionar 
         else:
             st.error("Por favor, introduz um nome válido.")
 
-# Compilar mapa de pessoal ativo
+# Compilar mapa de pessoal ativo e estruturas por equipa
 info_enfermeiros = {}
+equipas_map = {}
 for eq, lista in st.session_state["equipas_dados"].items():
+    equipas_map[eq] = []
     for m in lista:
         if m["ativo"]:
             info_enfermeiros[m["nome"]] = {
@@ -166,6 +168,7 @@ for eq, lista in st.session_state["equipas_dados"].items():
                 "coordenadora": m["coordenadora"],
                 "tipo_horario": m.get("tipo_horario", "Roulement")
             }
+            equipas_map[eq].append(m["nome"])
 
 todos_enfs = list(info_enfermeiros.keys())
 
@@ -230,11 +233,11 @@ if st.session_state["bloqueios"]:
             st.rerun()
 
 # ----------------------------------------------------
-# 6. GERADOR DE ESCALA COM RÁCIOS E REGRAS LEGAIS
+# 6. GERADOR DE ESCALA COM RÁCIOS RIGOROSOS E COESÃO DE EQUIPAS
 # ----------------------------------------------------
 st.divider()
 
-if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type="primary"):
+if st.button("🚀 Gerar Escala Final (Rácios Exatos 6M / 6T / 5N)", type="primary"):
     
     escala = {e: [""] * dias_totais for e in todos_enfs}
     
@@ -267,18 +270,15 @@ if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type=
             if escala[e][d_idx] == "":
                 escala[e][d_idx] = PADRAO_ROULEMENT[(d_idx + offset) % len(PADRAO_ROULEMENT)]
 
-    # 4. Processamento Dia a Dia
+    # 4. Processamento Dia a Dia com Controlo Rigoroso de Rácios (6M, 6T, 5N)
     for d_idx in range(dias_totais):
         dia_sem_num = dias_semana_num[d_idx]
         
-        # A. Descanso pós-noite obrigatório e regras estritas de transição
+        # A. Descanso pós-noite obrigatório
         if d_idx > 0:
             for e in todos_enfs:
-                ant = escala[e][d_idx - 1]
-                atual = escala[e][d_idx]
-                if atual == "":
-                    if ant == "N4":
-                        escala[e][d_idx] = "D"
+                if escala[e][d_idx - 1] == "N4" and escala[e][d_idx] == "":
+                    escala[e][d_idx] = "D"
 
         # B. Amamentação: Máximo 3 de manhã, restante folga D
         am_disp = [e for e in amamentacao_lista if escala[e][d_idx] not in ["L", "Au", "GvR"]]
@@ -295,13 +295,12 @@ if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type=
             ant_cp = escala["Céu Peralta"][d_idx - 1] if d_idx > 0 else "D"
             escala["Céu Peralta"][d_idx] = "T72" if ant_cp == "T72" else "M59"
 
-        # D. Seleção Rigorosa de NOITES (N4) -> Exatamente 5 pessoas (min 2 coordenadores)
+        # --- SELEÇÃO DE NOITES (N4): Exatamente 5 elementos (mín 2 coordenadores) ---
         candidatos_n = []
         for e in todos_enfs:
             if escala[e][d_idx] != "": continue
             ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            if ant in ["M59", "T72"]: continue
-            
+            if ant in ["M59", "T72"]: continue # Transições proibidas M->N ou T->N
             if dia_sem_num == 0 and d_idx > 0:
                 sab_folga = fds_folga_por_pessoa.get(e)
                 if sab_folga is not None and (d_idx - 1) == sab_folga + 1:
@@ -328,14 +327,14 @@ if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type=
         for e in noite_dia:
             escala[e][d_idx] = "N4"
 
-        # E. Seleção Rigorosa de MANHÃS (M59) -> Exatamente 6 pessoas (min 2 coordenadores)
+        # --- SELEÇÃO DE MANHÃS (M59): Exatamente 6 elementos (mín 2 coordenadores) ---
         manha_dia = [e for e in todos_enfs if escala[e][d_idx] == "M59"]
         
         candidatos_m = []
         for e in todos_enfs:
             if escala[e][d_idx] != "": continue
             ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            if ant in ["N4", "T72"]: continue
+            if ant in ["N4", "T72"]: continue # Transições proibidas N->M ou T->M
             candidatos_m.append(e)
 
         if len(manha_dia) < 6:
@@ -361,12 +360,12 @@ if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type=
             if escala[e][d_idx] == "":
                 escala[e][d_idx] = "M59"
 
-        # F. Seleção Rigorosa de TARDES (T72) -> Exatamente 6 pessoas (min 2 coordenadores)
+        # --- SELEÇÃO DE TARDES (T72): Exatamente 6 elementos (mín 2 coordenadores) ---
         candidatos_t = []
         for e in todos_enfs:
             if escala[e][d_idx] != "": continue
             ant = escala[e][d_idx - 1] if d_idx > 0 else "D"
-            if ant == "N4": continue
+            if ant == "N4": continue # Transição proibida N->T
             candidatos_t.append(e)
 
         if len(candidatos_t) < 6:
@@ -406,7 +405,7 @@ if st.button("🚀 Gerar Escala Final (Rácios 6M/6T/5N + Regras Legais)", type=
     df_escala.insert(0, "Coord.", [ "Sim" if info_enfermeiros[e]["coordenadora"] else "Não" for e in df_escala.index ])
     df_escala.insert(0, "Equipa", [ info_enfermeiros[e]["equipa"] for e in df_escala.index ])
 
-    st.subheader("📊 Tabela Completa da Escala (Rigorosamente Validada)")
+    st.subheader("📊 Tabela Completa da Escala (Rigorosamente Validada por Equipa)")
     st.dataframe(df_escala, use_container_width=True)
 
     # Validação de Rácios
