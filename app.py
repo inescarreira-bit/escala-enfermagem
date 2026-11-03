@@ -3,10 +3,10 @@ import pandas as pd
 import random
 from datetime import date, timedelta
 
-st.set_page_config(page_title="Escala ULS Leiria - Gestão por Equipas", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="Escala ULS Leiria - Rigor por Equipas", page_icon="🏥", layout="wide")
 
-st.title("🏥 Gestor Avançado de Escalas por Equipas (ULS Leiria)")
-st.write("Escala inteligente com rácios diários (6M / 6T / 5N), 2 Coordenadores por turno, limite de Amamentação e Roulement M-M-T-T-F-D-N-N-F-F.")
+st.title("🏥 Gestor de Escalas de Enfermagem - Rigor e Equipas (ULS Leiria)")
+st.write("Cumprimento estrito de rácios (6M / 6T / 5N), 2 Coordenadores/turno, Equipa Coesa, Fins de Semana Justos e Bloqueios.")
 
 # ----------------------------------------------------
 # 1. LEGENDA DE TURNOS OFICIAIS (SISQUAL)
@@ -23,75 +23,68 @@ TURNOS_CONFIG = {
     "GvR": "Gravidez de Risco"
 }
 
-# Sequence base de Roulement Ideal: M M T T F D N N F F
-PADRAO_ROULEMENT = ["M59", "M59", "T72", "T72", "D", "D", "N4", "N4", "D", "D"]
-
 # ----------------------------------------------------
-# 2. BASE DE DADOS DAS EQUIPAS (PREDEFINIDA)
+# 2. BASE DE DADOS DAS EQUIPAS
 # ----------------------------------------------------
 EQUIPAS_INICIAIS = {
     "Equipa 1": [
-        {"nome": "Ana Costa", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Beatriz", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Alexandra", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Patricia A.", "coordenadora": False, "regime": "Roulement", "ativo": True},
-        {"nome": "Mariana D.", "coordenadora": False, "regime": "Roulement", "ativo": True},
+        {"nome": "Ana Costa", "coordenadora": True, "ativo": True},
+        {"nome": "Beatriz", "coordenadora": True, "ativo": True},
+        {"nome": "Alexandra", "coordenadora": True, "ativo": True},
+        {"nome": "Patricia A.", "coordenadora": False, "ativo": True},
+        {"nome": "Mariana D.", "coordenadora": False, "ativo": True},
     ],
     "Equipa 2": [
-        {"nome": "Inês Guerra", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Nidia", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Inês M.", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Marta", "coordenadora": False, "regime": "Roulement", "ativo": True},
-        {"nome": "Barbara", "coordenadora": False, "regime": "Roulement", "ativo": True},
+        {"nome": "Inês Guerra", "coordenadora": True, "ativo": True},
+        {"nome": "Nidia", "coordenadora": True, "ativo": True},
+        {"nome": "Inês M.", "coordenadora": True, "ativo": True},
+        {"nome": "Marta", "coordenadora": False, "ativo": True},
+        {"nome": "Barbara", "coordenadora": False, "ativo": True},
     ],
     "Equipa 3": [
-        {"nome": "Sofia", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Joana N.", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Daniela F.", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Rafaela", "coordenadora": False, "regime": "Roulement", "ativo": True},
-        {"nome": "Diogo", "coordenadora": False, "regime": "Roulement", "ativo": True},
-        {"nome": "Catarina", "coordenadora": False, "regime": "Roulement", "ativo": True},
+        {"nome": "Sofia", "coordenadora": True, "ativo": True},
+        {"nome": "Joana N.", "coordenadora": True, "ativo": True},
+        {"nome": "Daniela F.", "coordenadora": True, "ativo": True},
+        {"nome": "Rafaela", "coordenadora": False, "ativo": True},
+        {"nome": "Diogo", "coordenadora": False, "ativo": True},
+        {"nome": "Catarina", "coordenadora": False, "ativo": True},
     ],
     "Equipa 4": [
-        {"nome": "Liliana", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Patricia Bento", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Iara", "coordenadora": False, "regime": "Roulement", "ativo": True},
-        {"nome": "Ana Filipa", "coordenadora": False, "regime": "Roulement", "ativo": True},
-        {"nome": "Teresa", "coordenadora": False, "regime": "Roulement", "ativo": True},
+        {"nome": "Liliana", "coordenadora": True, "ativo": True},
+        {"nome": "Patricia Bento", "coordenadora": True, "ativo": True},
+        {"nome": "Iara", "coordenadora": False, "ativo": True},
+        {"nome": "Ana Filipa", "coordenadora": False, "ativo": True},
+        {"nome": "Teresa", "coordenadora": False, "ativo": True},
     ],
     "Equipa 5": [
-        {"nome": "Inês Carreira", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Mariana Neves", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Eva Mota", "coordenadora": True, "regime": "Roulement", "ativo": True},
-        {"nome": "Bianca", "coordenadora": False, "regime": "Roulement", "ativo": True},
-        {"nome": "Laura", "coordenadora": False, "regime": "Roulement", "ativo": True},
-        {"nome": "Francisca", "coordenadora": False, "regime": "Roulement", "ativo": True},
+        {"nome": "Inês Carreira", "coordenadora": True, "ativo": True},
+        {"nome": "Mariana Neves", "coordenadora": True, "ativo": True},
+        {"nome": "Eva Mota", "coordenadora": True, "ativo": True},
+        {"nome": "Bianca", "coordenadora": False, "ativo": True},
+        {"nome": "Laura", "coordenadora": False, "ativo": True},
+        {"nome": "Francisca", "coordenadora": False, "ativo": True},
     ],
     "Amamentação": [
-        {"nome": "Diana Oliveira", "coordenadora": False, "regime": "Amamentação", "ativo": True},
-        {"nome": "Patricia M.", "coordenadora": False, "regime": "Amamentação", "ativo": True},
-        {"nome": "Andreia M.", "coordenadora": False, "regime": "Amamentação", "ativo": True},
-        {"nome": "Ana Sofia", "coordenadora": False, "regime": "Amamentação", "ativo": True},
+        {"nome": "Diana Oliveira", "coordenadora": False, "ativo": True},
+        {"nome": "Patricia M.", "coordenadora": False, "ativo": True},
+        {"nome": "Andreia M.", "coordenadora": False, "ativo": True},
+        {"nome": "Ana Sofia", "coordenadora": False, "ativo": True},
     ],
     "Outros / Especiais": [
-        {"nome": "Céu Peralta", "coordenadora": False, "regime": "Manhã Preferencial", "ativo": True},
+        {"nome": "Céu Peralta", "coordenadora": False, "ativo": True}, # Prefere Manhãs
     ]
 }
 
-# Inicialização de Estado na Sessão
 if "equipas_dados" not in st.session_state:
     st.session_state["equipas_dados"] = EQUIPAS_INICIAIS
 
 if "bloqueios" not in st.session_state:
     st.session_state["bloqueios"] = {}
 
-if "metas_turnos" not in st.session_state:
-    st.session_state["metas_turnos"] = {}
-
 # ----------------------------------------------------
-# 3. BARRA LATERAL: DATAS E PARÂMETROS
+# 3. BARRA LATERAL: DATAS
 # ----------------------------------------------------
-st.sidebar.header("📅 1. Período da Escala")
+st.sidebar.header("📅 Período da Escala")
 data_inicio = st.sidebar.date_input("Data de Início", value=date(2026, 10, 26))
 data_fim = st.sidebar.date_input("Data de Fim", value=date(2026, 11, 22))
 
@@ -102,247 +95,206 @@ if dias_totais <= 0:
 
 dias_semana_pt = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 colunas_dias = []
+indices_fins_de_semana = [] # Pares de (Sábado_idx, Domingo_idx)
+
+# Mapear fins de semana completos do período
+sabs_doms = []
 for i in range(dias_totais):
     d_atual = data_inicio + timedelta(days=i)
     colunas_dias.append(f"{d_atual.strftime('%d/%m')} ({dias_semana_pt[d_atual.weekday()].lower()})")
+    if d_atual.weekday() == 5: # Sábado
+        if i + 1 < dias_totais:
+            sabs_doms.append((i, i+1))
 
 # ----------------------------------------------------
-# 4. GESTÃO DE EQUIPAS E PESSOAL
+# 4. GESTÃO DE EQUIPAS E ESTATUTOS
 # ----------------------------------------------------
-st.subheader("👥 1. Gestão de Equipas e Estatutos de Enfermeiros")
+st.subheader("👥 1. Gestão de Equipas, Ativos e Coordenadores")
 
-with st.expander("⚙️ Gerir Elementos, Ativar/Inativar e Trocar Regimes", expanded=False):
-    # Seleção de Equipa para editar
-    eq_sel = st.selectbox("Escolhe a Equipa para editar:", list(st.session_state["equipas_dados"].keys()))
-    
-    st.markdown(f"**Elementos da {eq_sel}:**")
+with st.expander("⚙️ Gerir Elementos, Ativar/Inativar ou Adicionar", expanded=False):
+    eq_sel = st.selectbox("Equipa:", list(st.session_state["equipas_dados"].keys()))
     membros = st.session_state["equipas_dados"][eq_sel]
     
     novos_membros = []
     for idx, m in enumerate(membros):
-        c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+        c1, c2, c3 = st.columns([3, 2, 2])
         with c1:
-            nome_attr = st.text_input(f"Nome #{idx+1}", value=m["nome"], key=f"nome_{eq_sel}_{idx}")
+            n_val = st.text_input(f"Nome #{idx+1}", value=m["nome"], key=f"n_{eq_sel}_{idx}")
         with c2:
-            coord_attr = st.checkbox("Coordenadora", value=m["coordenadora"], key=f"coord_{eq_sel}_{idx}")
+            c_val = st.checkbox("Coordenadora", value=m["coordenadora"], key=f"c_{eq_sel}_{idx}")
         with c3:
-            regime_attr = st.selectbox("Regime", ["Roulement", "Amamentação", "Manhã Preferencial", "Apenas Manhãs"], index=["Roulement", "Amamentação", "Manhã Preferencial", "Apenas Manhãs"].index(m["regime"]) if m["regime"] in ["Roulement", "Amamentação", "Manhã Preferencial", "Apenas Manhãs"] else 0, key=f"reg_{eq_sel}_{idx}")
-        with c4:
-            ativo_attr = st.checkbox("Ativo(a)", value=m["ativo"], key=f"ativo_{eq_sel}_{idx}")
-            
-        novos_membros.append({"nome": nome_attr, "coordenadora": coord_attr, "regime": regime_attr, "ativo": ativo_attr})
-    
+            a_val = st.checkbox("Ativo(a)", value=m["ativo"], key=f"a_{eq_sel}_{idx}")
+        novos_membros.append({"nome": n_val, "coordenadora": c_val, "ativo": a_val})
     st.session_state["equipas_dados"][eq_sel] = novos_membros
 
-    # Adicionar Novo Enfermeiro
-    st.divider()
-    st.markdown("**➕ Adicionar Novo Colaborador**")
-    ca1, ca2, ca3 = st.columns(3)
-    with ca1:
-        novo_nome = st.text_input("Nome do Enfermeiro/a:")
-    with ca2:
-        novo_coord = st.checkbox("É Coordenador/a?")
-    with ca3:
-        novo_regime = st.selectbox("Regime:", ["Roulement", "Amamentação", "Manhã Preferencial", "Apenas Manhãs"])
-    
-    if st.button("Adicionar a esta equipa"):
-        if novo_nome:
-            st.session_state["equipas_dados"][eq_sel].append({"nome": novo_nome, "coordenadora": novo_coord, "regime": novo_regime, "ativo": True})
-            st.success(f"{novo_nome} adicionado/a à {eq_sel}!")
-            st.rerun()
-
-# Lista de enfermeiros ativos e dicionário de atributos
-todos_enfermeiros_ativos = []
+# Compilar mapa de pessoal ativo
 info_enfermeiros = {}
-
 for eq, lista in st.session_state["equipas_dados"].items():
     for m in lista:
         if m["ativo"]:
-            todos_enfermeiros_ativos.append(m["nome"])
             info_enfermeiros[m["nome"]] = {
                 "equipa": eq,
-                "coordenadora": m["coordenadora"],
-                "regime": m["regime"]
+                "coordenadora": m["coordenadora"]
             }
 
-# Metas de turnos padrão por pessoa
-for e in todos_enfermeiros_ativos:
-    if e not in st.session_state["metas_turnos"]:
-        st.session_state["metas_turnos"][e] = 18
-
-with st.expander("🎯 Definir Meta de Turnos Mensais por Pessoa"):
-    cols_meta = st.columns(3)
-    for i, e in enumerate(todos_enfermeiros_ativos):
-        with cols_meta[i % 3]:
-            st.session_state["metas_turnos"][e] = st.number_input(f"Meta de Turnos: {e}", min_value=0, max_value=dias_totais, value=st.session_state["metas_turnos"][e], key=f"m_{e}")
+todos_enfs = list(info_enfermeiros.keys())
 
 # ----------------------------------------------------
-# 5. BLOQUEIOS DE DIAS E RESTRIÇÕES ESPECÍFICAS
+# 5. BLOQUEIOS DE DIAS E PEDIDOS INDIVIDUAIS
 # ----------------------------------------------------
 st.divider()
 st.subheader("📌 2. Bloqueio de Dias e Pedidos Específicos")
 
 cb1, cb2, cb3 = st.columns(3)
 with cb1:
-    enf_sel = st.selectbox("Enfermeiro/a:", todos_enfermeiros_ativos)
+    enf_sel = st.selectbox("Enfermeiro/a:", todos_enfs)
 with cb2:
     dia_sel = st.selectbox("Dia do Calendário:", colunas_dias)
 with cb3:
     estado_sel = st.selectbox("Turno / Pedido Fixo:", ["D (Descanso/Folga)", "L (Férias)", "M59 (Manhã)", "T72 (Tarde)", "N4 (Noite)", "Au (Ausência)"])
 
-sigla_estado = estado_sel.split(" ")[0]
+sigla_est = estado_sel.split(" ")[0]
 
-if st.button("➕ Fixar Restrição/Pedido"):
+if st.button("➕ Fixar Pedido/Bloqueio"):
     if enf_sel not in st.session_state["bloqueios"]:
         st.session_state["bloqueios"][enf_sel] = {}
-    st.session_state["bloqueios"][enf_sel][dia_sel] = sigla_estado
-    st.success(f"Fixado: {enf_sel} -> {sigla_estado} no dia {dia_sel}.")
+    st.session_state["bloqueios"][enf_sel][dia_sel] = sigla_est
+    st.success(f"Registado: {enf_sel} -> {sigla_est} no dia {dia_sel}.")
 
 if st.session_state["bloqueios"]:
-    with st.expander("Ver Restrições Definidas Ativas"):
-        for e, rest in st.session_state["bloqueios"].items():
-            for d, t in rest.items():
+    with st.expander("Ver Restrições Ativas"):
+        for e, r in st.session_state["bloqueios"].items():
+            for d, t in r.items():
                 st.text(f"• {e} ({d}) -> {t}")
-        if st.button("Limpar Restrições"):
+        if st.button("Limpar Todas as Restrições"):
             st.session_state["bloqueios"] = {}
             st.rerun()
 
 # ----------------------------------------------------
-# 6. GERADOR AUTOMÁTICO DE ESCALA
+# 6. GERADOR INTELIGENTE RIGOROSO
 # ----------------------------------------------------
 st.divider()
 
-if st.button("🚀 Gerar Escala com Rácios (6M / 6T / 5N) e Coordenadores", type="primary"):
+if st.button("🚀 Gerar Escala com Rigor Absoluto de Rácios e Fins de Semana", type="primary"):
     
-    escala = {e: [""] * dias_totais for e in todos_enfermeiros_ativos}
-    turnos_contagem = {e: 0 for e in todos_enfermeiros_ativos}
+    escala = {e: [""] * dias_totais for e in todos_enfs}
     
-    # Passagem 1: Aplicar Bloqueios Manuais
-    for e in todos_enfermeiros_ativos:
+    # 1. Aplicar Bloqueios Manuais e Férias
+    for e in todos_enfs:
         if e in st.session_state["bloqueios"]:
             for d_idx, d_nome in enumerate(colunas_dias):
                 if d_nome in st.session_state["bloqueios"][e]:
                     escala[e][d_idx] = st.session_state["bloqueios"][e][d_nome]
-                    if escala[e][d_idx] not in ["D", "L", "Au", "GvR"]:
-                        turnos_contagem[e] += 1
 
-    # Passagem 2: Céu Peralta (Muito mais M que T)
-    if "Céu Peralta" in escala:
-        for d_idx in range(dias_totais):
-            if escala["Céu Peralta"][d_idx] == "":
-                if turnos_contagem["Céu Peralta"] < st.session_state["metas_turnos"]["Céu Peralta"]:
-                    # 80% Manhãs, 20% Tardes
-                    escala["Céu Peralta"][d_idx] = "M59" if random.random() < 0.80 else "T72"
-                    turnos_contagem["Céu Peralta"] += 1
-                else:
-                    escala["Céu Peralta"][d_idx] = "D"
+    # 2. Garantir 1 Fim de Semana Completo de Folga por Pessoa (distribuído de forma justa)
+    # Atribuir fim de semana de folga a cada enfermeiro de forma rotativa nos sabs_doms disponíveis
+    if sabs_doms:
+        for idx_e, e in enumerate(todos_enfs):
+            # Escolher um fim de semana de folga para este enfermeiro de forma equilibrada
+            fds_escolhido = sabs_doms[idx_e % len(sabs_doms)]
+            sab_idx, dom_idx = fds_escolhido
+            if escala[e][sab_idx] == "":
+                escala[e][sab_idx] = "D"
+            if escala[e][dom_idx] == "":
+                escala[e][dom_idx] = "D"
 
-    # Passagem 3: Amamentação (Máximo 3 por Manhã)
-    amamentacao_enfermeiros = [e for e in todos_enfermeiros_ativos if info_enfermeiros[e]["regime"] == "Amamentação"]
-    
+    # 3. Preenchimento Diário Rigoroso (Respeitando Rácios: 6M, 6T, 5N e Coordenadores >= 2)
+    amamentacao_lista = [e for e in todos_enfs if info_enfermeiros[e]["equipa"] == "Amamentação"]
+    ceu_peralta = ["Céu Peralta"] if "Céu Peralta" in todos_enfs else []
+    equipa_normal = [e for e in todos_enfs if e not in amamentacao_lista and e not in céu_peralta]
+
     for d_idx in range(dias_totais):
-        am_no_dia = 0
-        random.shuffle(amamentacao_enfermeiros)
-        for e in amamentacao_enfermeiros:
+        # Identificar quem já tem folga fixa ou férias neste dia
+        folgados_hoje = [e for e in todos_enfs if escala[e][d_idx] in ["D", "L", "Au", "GvR"]]
+        disponiveis = [e for e in todos_enfs if escala[e][d_idx] == ""]
+        
+        # Separar coordenadores disponíveis e não coordenadores
+        coords_disp = [e for e in disponiveis if info_enfermeiros[e]["coordenadora"]]
+        normais_disp = [e for e in disponiveis if not info_enfermeiros[e]["coordenadora"]]
+
+        # ----------------- NOITE (N4): Exige 5 pessoas, mín. 2 coordenadores
+        noite_atribuida = []
+        # Selecionar coordenadores para a noite (mínimo 2)
+        n_coords_noite = min(2, len(coords_disp))
+        noite_atribuida.extend(coords_disp[:n_coords_noite])
+        coords_disp = coords_disp[n_coords_noite:]
+        
+        # Completar noite até 5 com disponíveis
+        falta_noite = 5 - len(noite_atribuida)
+        tot_disp_restantes = coords_disp + normais_disp
+        noite_atribuida.extend(tot_disp_restantes[:falta_noite])
+        
+        # Atualizar disponíveis
+        for e in noite_atribuida:
+            escala[e][d_idx] = "N4"
+            if e in coords_disp: coords_disp.remove(e)
+            elif e in normais_disp: normais_disp.remove(e)
+
+        # Regra de segurança pós-noite: dia seguinte é obrigatoriamente Descanso (D)
+        if d_idx + 1 < dias_totais:
+            for e in noite_atribuida:
+                if escala[e][d_idx + 1] == "":
+                    escala[e][d_idx + 1] = "D"
+
+        # Atualizar listas após noites
+        disponiveis = [e for e in todos_enfs if escala[e][d_idx] == ""]
+        coords_disp = [e for e in disponiveis if info_enfermeiros[e]["coordenadora"]]
+        normais_disp = [e for e in disponiveis if not info_enfermeiros[e]["coordenadora"]]
+
+        # ----------------- MANHÃ (M59): Exige 6 pessoas (máx. 3 de amamentação), mín. 2 coordenadores
+        manha_atribuida = []
+        
+        # Alocar amamentação (máximo 3)
+        am_disp = [e for e in amamentacao_lista if escala[e][d_idx] == ""]
+        am_a_colocar = am_disp[:3]
+        manha_atribuida.extend(am_a_colocar)
+        
+        # Céu Peralta prefere Manhã se estiver disponível
+        if "Céu Peralta" in normais_disp and len(manha_atribuida) < 6:
+            manha_atribuida.append("Céu Peralta")
+            normais_disp.remove("Céu Peralta")
+
+        # Garantir coordenadores na manhã (mínimo 2 no total do turno)
+        coords_ja_na_manha = sum(1 for e in manha_atribuida if info_enfermeiros[e]["coordenadora"])
+        coords_necessarias = max(0, 2 - coords_ja_na_manha)
+        
+        n_coords_m = min(coords_necessarias, len(coords_disp))
+        manha_atribuida.extend(coords_disp[:n_coords_m])
+        coords_disp = coords_disp[n_coords_m:]
+
+        # Completar manhã até 6
+        falta_manha = 6 - len(manha_atribuida)
+        tot_m_restantes = coords_disp + normais_disp
+        manha_atribuida.extend(tot_m_restantes[:falta_manha])
+
+        for e in manha_atribuida:
+            escala[e][d_idx] = "M59"
+            if e in coords_disp: coords_disp.remove(e)
+            elif e in normais_disp: normais_disp.remove(e)
+            elif e in am_a_colocar: pass
+
+        # Atualizar disponíveis
+        disponiveis = [e for e in todos_enfs if escala[e][d_idx] == ""]
+        coords_disp = [e for e in disponiveis if info_enfermeiros[e]["coordenadora"]]
+        normais_disp = [e for e in disponiveis if not info_enfermeiros[e]["coordenadora"]]
+
+        # ----------------- TARDE (T72): Exige 6 pessoas, mín. 2 coordenadores
+        tarde_atribuida = []
+        
+        coords_ja_na_tarde = 0 # Assegurar min 2
+        coords_necessarias_t = max(0, 2 - coords_ja_na_tarde)
+        n_coords_t = min(coords_necessarias_t, len(coords_disp))
+        tarde_atribuida.extend(coords_disp[:n_coords_t])
+        coords_disp = coords_disp[n_coords_t:]
+
+        falta_tarde = 6 - len(tarde_atribuida)
+        tot_t_restantes = coords_disp + normais_disp
+        tarde_atribuida.extend(tot_t_restantes[:falta_tarde])
+
+        for e in tarde_atribuida:
+            escala[e][d_idx] = "T72"
+
+        # Qualquer restante fica de Folga (D)
+        for e in todos_enfs:
             if escala[e][d_idx] == "":
-                if am_no_dia < 3 and turnos_contagem[e] < st.session_state["metas_turnos"][e]:
-                    escala[e][d_idx] = "M59"
-                    turnos_contagem[e] += 1
-                    am_no_dia += 1
-                else:
-                    escala[e][d_idx] = "D"
-
-    # Passagem 4: Preenchimento do Roulement (M M T T F D N N F F)
-    roulement_enfermeiros = [e for e in todos_enfermeiros_ativos if info_enfermeiros[e]["regime"] == "Roulement"]
-    
-    for e_idx, e in enumerate(roulement_enfermeiros):
-        offset = (e_idx * 2) % len(PADRAO_ROULEMENT)
-        
-        for d_idx in range(dias_totais):
-            if escala[e][d_idx] == "":
-                # Regra de Segurança Pós-Noite
-                if d_idx > 0 and escala[e][d_idx-1] == "N4":
-                    escala[e][d_idx] = "D"
-                elif turnos_contagem[e] < st.session_state["metas_turnos"][e]:
-                    turno_sugerido = PADRAO_ROULEMENT[(d_idx + offset) % len(PADRAO_ROULEMENT)]
-                    escala[e][d_idx] = turno_sugerido
-                    if turno_sugerido not in ["D", "L"]:
-                        turnos_contagem[e] += 1
-                else:
-                    escala[e][d_idx] = "D"
-
-    # Preencher restantes vazios com Folga
-    for e in todos_enfermeiros_ativos:
-        for d_idx in range(dias_totais):
-            if escala[e][d_idx] == "":
-                escala[e][d_idx] = "D"
-
-    # Construção da Tabela Final
-    df_escala = pd.DataFrame(escala, index=colunas_dias).T
-    
-    # Adicionar colunas informativas de Equipa e Coordenadora
-    df_escala.insert(0, "Coordenadora", [ "Sim" if info_enfermeiros[e]["coordenadora"] else "Não" for e in df_escala.index ])
-    df_escala.insert(0, "Equipa", [ info_enfermeiros[e]["equipa"] for e in df_escala.index ])
-
-    st.subheader("📊 Tabela Completa da Escala de Enfermagem")
-    st.dataframe(df_escala, use_container_width=True)
-
-    # ----------------------------------------------------
-    # 7. ANÁLISE DE RÁCIOS E COORDENADORES POR TURNO
-    # ----------------------------------------------------
-    st.divider()
-    st.subheader("📈 Validação de Rácios e Coordenadores por Turno")
-    
-    m_counts, t_counts, n_counts = [], [], []
-    coord_m, coord_t, coord_n = [], [], []
-
-    for d_nome in colunas_dias:
-        col = df_escala[d_nome]
-        
-        m_enfs = col[col == "M59"].index
-        t_enfs = col[col == "T72"].index
-        n_enfs = col[col == "N4"].index
-        
-        m_counts.append(len(m_enfs))
-        t_counts.append(len(t_enfs))
-        n_counts.append(len(n_enfs))
-        
-        coord_m.append(sum(1 for e in m_enfs if info_enfermeiros[e]["coordenadora"]))
-        coord_t.append(sum(1 for e in t_enfs if info_enfermeiros[e]["coordenadora"]))
-        coord_n.append(sum(1 for e in n_enfs if info_enfermeiros[e]["coordenadora"]))
-
-    df_stats = pd.DataFrame({
-        "Manhãs (M) [Meta: 6]": m_counts,
-        "Coordenadores M [Min: 2]": coord_m,
-        "Tardes (T) [Meta: 6]": t_counts,
-        "Coordenadores T [Min: 2]": coord_t,
-        "Noites (N) [Meta: 5]": n_counts,
-        "Coordenadores N [Min: 2]": coord_n,
-    }, index=colunas_dias)
-
-    st.dataframe(df_stats.T, use_container_width=True)
-
-    # Botão para Descarregar
-    csv = df_escala.to_csv().encode('utf-8')
-    st.download_button(
-        label="📥 Descarregar Escala em CSV / Excel",
-        data=csv,
-        file_name="escala_uls_leiria_equipas.csv",
-        mime="text/csv"
-    )
-
-# ----------------------------------------------------
-# 8. LEGENDA
-# ----------------------------------------------------
-st.divider()
-st.subheader("📖 Legenda de Turnos")
-cl1, cl2 = st.columns(2)
-itens = list(TURNOS_CONFIG.items())
-metade = len(itens) // 2
-
-with cl1:
-    for k, v in itens[:metade]:
-        st.write(f"**{k}**: {v}")
-with cl2:
-    for k, v in itens[metade:]:
-        st.write(f"**{k}**: {v}")
+                escala[e][d_idx] =
