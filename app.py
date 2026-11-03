@@ -3,10 +3,10 @@ import pandas as pd
 import random
 from datetime import date, timedelta
 
-st.set_page_config(page_title="Escala ULS Leiria - Rotação Perfeita", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="Escala ULS Leiria - Justiça e Equidade", page_icon="🏥", layout="wide")
 
 st.title("🏥 Gestor de Escalas de Enfermagem - ULS Leiria")
-st.write("Escala com rotação cíclica estrita (M-M-T-T-D-D-N-N-D-D), rácios diários (6M / 6T / 5N), Coordenadores, Amamentação e Feriados.")
+st.write("Escala com rácios diários rigorosos (6M / 6T / 5N), distribuição justa e equilibrada de turnos por toda a equipa, Coordenadores e Amamentação.")
 
 # ----------------------------------------------------
 # 1. LEGENDA DE TURNOS OFICIAIS (SISQUAL)
@@ -22,9 +22,6 @@ TURNOS_CONFIG = {
     "Au": "Ausência Genérica",
     "GvR": "Gravidez de Risco"
 }
-
-# Sequência oficial de Roulement com descanso incorporado
-PADRAO_ROULEMENT = ["M59", "M59", "T72", "T72", "D", "D", "N4", "N4", "D", "D"]
 
 # ----------------------------------------------------
 # 2. BASE DE DADOS DAS EQUIPAS
@@ -225,15 +222,15 @@ if st.session_state["bloqueios"]:
             st.rerun()
 
 # ----------------------------------------------------
-# 6. GERADOR DE ESCALA COM ROTAÇÃO REAL E RÁCIOS
+# 6. GERADOR COM DISTRIBUIÇÃO JUSTA E RÁCIOS RIGOROSOS
 # ----------------------------------------------------
 st.divider()
 
-if st.button("🚀 Gerar Escala Final (Rotação Correta + Rácios)", type="primary"):
+if st.button("🚀 Gerar Escala Justa (Rácios Exatos e Rotação Equilibrada)", type="primary"):
     
     escala = {e: [""] * dias_totais for e in todos_enfs}
     
-    # 1. Aplicar Bloqueios Manuais (Férias, Folgas Fixas, etc.)
+    # 1. Aplicar Bloqueios Manuais
     for e in todos_enfs:
         if e in st.session_state["bloqueios"]:
             for d_idx, d_nome in enumerate(colunas_dias):
@@ -253,62 +250,133 @@ if st.button("🚀 Gerar Escala Final (Rotação Correta + Rácios)", type="prim
     amamentacao_lista = [e for e in todos_enfs if info_enfermeiros[e]["equipa"] == "Amamentação"]
     roulement_lista = [e for e in todos_enfs if e not in amamentacao_lista and e != "Céu Peralta"]
 
-    # 3. Atribuir a rotação cíclica correta (M-M-T-T-D-D-N-N-D-D) desfasada por pessoa
-    for idx_r, e in enumerate(roulement_lista):
-        offset = (idx_r * 3) % len(PADRAO_ROULEMENT)
-        for d_idx in range(dias_totais):
-            if escala[e][d_idx] == "":
-                escala[e][d_idx] = PADRAO_ROULEMENT[(d_idx + offset) % len(PADRAO_ROULEMENT)]
+    # Histórico de contagem de turnos para garantir equidade total
+    contagem_m = {e: 0 for e in todos_enfs}
+    contagem_t = {e: 0 for e in todos_enfs}
+    contagem_n = {e: 0 for e in todos_enfs}
 
-    # 4. Ajustes Diários para Garantir Rácios Exatos (6M, 6T, 5N) e Coordenadores (>=2) mantendo a rotação
+    # 3. Preenchimento diário com critério de justiça (quem tem menos turnos desse tipo faz a seguir)
     for d_idx in range(dias_totais):
         dia_sem_num = dias_semana_num[d_idx]
         
-        # A. Amamentação: Máximo 3 de manhã, restante folga D
-        am_disp = [e for e in amamentacao_lista if escala[e][d_idx] not in ["L", "Au", "GvR"]]
+        # A. Descanso obrigatório pós-noite do dia anterior
+        if d_idx > 0:
+            for e in todos_enfs:
+                if escala[e][d_idx - 1] == "N4" and escala[e][d_idx] == "":
+                    escala[e][d_idx] = "D"
+
+        # B. Amamentação: Máximo 3 de manhã, restante folga D
+        am_disp = [e for e in amamentacao_lista if escala[e][d_idx] == ""]
         random.shuffle(am_disp)
         am_trabalham = am_disp[:3]
         am_folgam = am_disp[3:]
         
         for e in am_trabalham:
             escala[e][d_idx] = "M59"
+            contagem_m[e] += 1
         for e in am_folgam:
             escala[e][d_idx] = "D"
 
-        # B. Céu Peralta (Prefere Manhãs)
-        if "Céu Peralta" in todos_enfs and escala["Céu Peralta"][d_idx] not in ["D", "L", "Au"]:
-            escala["Céu Peralta"][d_idx] = "M59" if random.random() < 0.85 else "T72"
+        # C. Céu Peralta (Prefere Manhãs)
+        if "Céu Peralta" in todos_enfs and escala["Céu Peralta"][d_idx] == "":
+            escala["Céu Peralta"][d_idx] = "M59"
+            contagem_m["Céu Peralta"] += 1
 
-        # C. Proteção de segunda-feira pós-fim de semana para noites
-        if dia_sem_num == 0 and d_idx > 0:
-            for e in todos_enfs:
-                if escala[e][d_idx] == "N4" and escala[e][d_idx - 1] in ["D", "L", "Au"]:
-                    escala[e][d_idx] = "D"
+        # D. Seleção de Noite (N4): Exatamente 5 pessoas (mín. 2 coordenadores)
+        disponiveis_n = [e for e in todos_enfs if escala[e][d_idx] == ""]
+        # Filtrar restrição de segunda-feira pós-fim de semana e transições ilegais
+        aptos_n = []
+        for e in disponiveis_n:
+            if dia_sem_num == 0 and d_idx > 0 and escala[e][d_idx - 1] in ["D", "L", "Au"]:
+                continue
+            # Ninguém faz noite se trabalhou tarde ontem (embora D acautele, validação extra)
+            aptos_n.append(e)
 
-        # D. Assegurar contagens exatas de Noite (5), Manhã (6) e Tarde (6) com coordenadores (>=2)
-        # Vamos recolher quem está atribuído a cada turno hoje
-        n_atrib = [e for e in todos_enfs if escala[e][d_idx] == "N4"]
-        m_atrib = [e for e in todos_enfs if escala[e][d_idx] == "M59"]
-        t_atrib = [e for e in todos_enfs if escala[e][d_idx] == "T72"]
-        d_atrib = [e for e in todos_enfs if escala[e][d_idx] == "D"]
+        coords_n = [e for e in aptos_n if info_enfermeiros[e]["coordenadora"]]
+        normais_n = [e for e in aptos_n if not info_enfermeiros[e]["coordenadora"]]
 
-        # Ajuste de Noites (Exatamente 5, min 2 coordenadores)
-        coords_n = [e for e in n_atrib if info_enfermeiros[e]["coordenadora"]]
-        if len(coords_n] < 2:
-            # Buscar coordenadores disponíveis nas folgas ou tardes para a noite
-            candidatos_coord = [e for e in (t_atrib + d_atrib) if info_enfermeiros[e]["coordenadora"] and e not in amamentacao_lista]
-            for c in candidatos_coord:
-                if len(coords_n) >= 2: break
-                if escala[c][d_idx] != "N4":
-                    escala[c][d_idx] = "N4"
-                    coords_n.append(c)
+        # Ordenar por quem tem menos noites feitas até agora para garantir justiça absoluta
+        coords_n.sort(key=lambda x: contagem_n[x])
+        normais_n.sort(key=lambda x: contagem_n[x])
 
-        # Recalcular listas após ajustes finos
-        n_atrib = [e for e in todos_enfs if escala[e][d_idx] == "N4"]
-        m_atrib = [e for e in todos_enfs if escala[e][d_idx] == "M59"]
-        t_atrib = [e for e in todos_enfs if escala[e][d_idx] == "T72"]
+        noite_dia = []
+        n_coord_needed = min(2, len(coords_n))
+        noite_dia.extend(coords_n[:n_coord_needed])
+        coords_n = coords_n[n_coord_needed:]
 
-    # 5. Regra dos Feriados (Dia 1 e Dia 8)
+        restantes_n = coords_n + normais_n
+        restantes_n.sort(key=lambda x: contagem_n[x])
+        
+        falta_n = 5 - len(noite_dia)
+        noite_dia.extend(restantes_n[:falta_n])
+
+        for e in noite_dia:
+            escala[e][d_idx] = "N4"
+            contagem_n[e] += 1
+
+        # E. Seleção de Manhã (M59): Completar até 6 pessoas (mín. 2 coordenadores)
+        disponiveis_m = [e for e in todos_enfs if escala[e][d_idx] == ""]
+        # Filtrar transição ilegal T -> M (proibir quem fez Tarde ontem de fazer Manhã hoje!)
+        aptos_m = []
+        for e in disponiveis_m:
+            if d_idx > 0 and escala[e][d_idx - 1] == "T72":
+                continue # Proibida transição T -> M por lei/descanso!
+            aptos_m.append(e)
+
+        coords_m = [e for e in aptos_m if info_enfermeiros[e]["coordenadora"]]
+        normais_m = [e for e in aptos_m if not info_enfermeiros[e]["coordenadora"]]
+
+        manha_dia = [e for e in todos_enfs if escala[e][d_idx] == "M59"]
+        coords_ja_m = sum(1 for e in manha_dia if info_enfermeiros[e]["coordenadora"])
+        coords_nec_m = max(0, 2 - coords_ja_m)
+
+        coords_m.sort(key=lambda x: contagem_m[x])
+        normais_m.sort(key=lambda x: contagem_m[x])
+
+        n_coord_m = min(coords_nec_m, len(coords_m))
+        manha_dia.extend(coords_m[:n_coord_m])
+        coords_m = coords_m[n_coord_m:]
+
+        restantes_m = coords_m + normais_m
+        restantes_m.sort(key=lambda x: contagem_m[x])
+
+        falta_m = 6 - len(manha_dia)
+        manha_dia.extend(restantes_m[:falta_m])
+
+        for e in manha_dia:
+            if escala[e][d_idx] == "":
+                escala[e][d_idx] = "M59"
+                contagem_m[e] += 1
+
+        # F. Seleção de Tarde (T72): Exatamente 6 pessoas (mín. 2 coordenadores)
+        disponiveis_t = [e for e in todos_enfs if escala[e][d_idx] == ""]
+        coords_t = [e for e in disponiveis_t if info_enfermeiros[e]["coordenadora"]]
+        normais_t = [e for e in disponiveis_t if not info_enfermeiros[e]["coordenadora"]]
+
+        coords_t.sort(key=lambda x: contagem_t[x])
+        normais_t.sort(key=lambda x: contagem_t[x])
+
+        tarde_dia = []
+        n_coord_t = min(2, len(coords_t))
+        tarde_dia.extend(coords_t[:n_coord_t])
+        coords_t = coords_t[n_coord_t:]
+
+        restantes_t = coords_t + normais_t
+        restantes_t.sort(key=lambda x: contagem_t[x])
+
+        falta_t = 6 - len(tarde_dia)
+        tarde_dia.extend(restantes_t[:falta_t])
+
+        for e in tarde_dia:
+            escala[e][d_idx] = "T72"
+            contagem_t[e] += 1
+
+        # G. Restantes vazios = Descanso (D)
+        for e in todos_enfs:
+            if escala[e][d_idx] == "":
+                escala[e][d_idx] = "D"
+
+    # 4. Regra dos Feriados (Dia 1 e Dia 8)
     if dias_totais >= 8:
         for e in todos_enfs:
             if escala[e][0] in ["M59", "T72", "N4"] and escala[e][7] in ["M59", "T72", "N4"]:
@@ -319,7 +387,7 @@ if st.button("🚀 Gerar Escala Final (Rotação Correta + Rácios)", type="prim
     df_escala.insert(0, "Coordenadora", [ "Sim" if info_enfermeiros[e]["coordenadora"] else "Não" for e in df_escala.index ])
     df_escala.insert(0, "Equipa", [ info_enfermeiros[e]["equipa"] for e in df_escala.index ])
 
-    st.subheader("📊 Tabela Completa da Escala de Enfermagem")
+    st.subheader("📊 Tabela Completa da Escala Justa e Equilibrada")
     st.dataframe(df_escala, use_container_width=True)
 
     # Validação de Rácios
@@ -359,7 +427,7 @@ if st.button("🚀 Gerar Escala Final (Rotação Correta + Rácios)", type="prim
     st.download_button(
         label="📥 Descarregar Escala em CSV / Excel",
         data=csv,
-        file_name="escala_uls_leiria_rotacao_perfeita.csv",
+        file_name="escala_uls_leiria_justa.csv",
         mime="text/csv"
     )
 
