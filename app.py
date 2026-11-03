@@ -17,7 +17,6 @@ def calcular_horas_trabalho_avancado(data_inicio_str, data_fim_str, horas_semana
     horas_diarias = horas_semanais / 5
     
     # 3. Inicializar o calendário de feriados do país (ex: Portugal "PT")
-    # Deteta automaticamente os anos corretos com base no intervalo
     anos_no_periodo = list(range(data_inicio.year, data_fim.year + 1))
     feriados_oficiais = holidays.CountryHoliday(cod_pais, years=anos_no_periodo)
     
@@ -29,7 +28,7 @@ def calcular_horas_trabalho_avancado(data_inicio_str, data_fim_str, horas_semana
     # 4. Iteração dia a dia no período selecionado
     data_atual = data_inicio
     while data_atual <= data_fim:
-        # weekday() -> 5 é Sábado, 6 é Domingo
+        # CORRIGIDO: 5 é Sábado, 6 é Domingo
         if data_atual.weekday() in:
             dias_fim_semana += 1
         elif data_atual in feriados_oficiais:
@@ -66,10 +65,9 @@ def calcular_horas_trabalho_avancado(data_inicio_str, data_fim_str, horas_semana
     print("=" * 60)
 
 # ==========================================
-# EXECUÇÃO DO EXEMPLO (Pode alterar as datas à vontade)
+# EXECUÇÃO DO EXEMPLO
 # ==========================================
 if __name__ == "__main__":
-    # Teste para o seu período atual (Novembro/Dezembro de 2026)
     calcular_horas_trabalho_avancado(
         data_inicio_str="2026-11-23", 
         data_fim_str="2026-12-20", 
