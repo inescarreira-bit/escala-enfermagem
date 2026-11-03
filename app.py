@@ -116,7 +116,7 @@ for i in range(dias_totais):
 # ----------------------------------------------------
 st.subheader("👥 1. Gestão de Equipas, Ativação e Adição de Pessoal")
 
-with st.expander("⚙️ Gerir Elementos, Coordenadores, Inativar ou Adicionar", expanded=True):
+with st.expander("⚙️ Gerir Elementos, Coordenadores, Inativar ou Adicionar", expanded=False):
     eq_sel = st.selectbox("Escolhe a Equipa para gerir:", list(st.session_state["equipas_dados"].keys()))
     membros = st.session_state["equipas_dados"][eq_sel]
     
@@ -166,9 +166,9 @@ todos_enfs = list(info_enfermeiros.keys())
 # Metas de turnos mensais por pessoa
 for e in todos_enfs:
     if e not in st.session_state["metas_turnos"]:
-        st.session_state["metas_turnos"][e] = 18 # Valor predefinido padrão
+        st.session_state["metas_turnos"][e] = 18
 
-with st.expander("🎯 Definir Meta de Turnos Mensais por Pessoa"):
+with st.expander("🎯 Definir Meta de Turnos Mensais por Pessoa", expanded=False):
     cols_meta = st.columns(3)
     for i, e in enumerate(todos_enfs):
         with cols_meta[i % 3]:
@@ -178,7 +178,7 @@ with st.expander("🎯 Definir Meta de Turnos Mensais por Pessoa"):
             )
 
 # ----------------------------------------------------
-# 5. BLOQUEIOS DE DIAS E PEDIDOS INDIVIDUAIS
+# 5. BLOQUEIOS DE DIAS E PEDIDOS INDIVIDUAIS (COM REMOÇÃO INDIVIDUAL)
 # ----------------------------------------------------
 st.divider()
 st.subheader("📌 2. Bloqueio de Dias e Pedidos Específicos")
@@ -198,13 +198,29 @@ if st.button("➕ Fixar Pedido/Bloqueio"):
         st.session_state["bloqueios"][enf_sel] = {}
     st.session_state["bloqueios"][enf_sel][dia_sel] = sigla_est
     st.success(f"Registado: {enf_sel} -> {sigla_est} no dia {dia_sel}.")
+    st.rerun()
 
 if st.session_state["bloqueios"]:
-    with st.expander("Ver Restrições Ativas"):
+    with st.expander("🗑️ Ver e Gerir Restrições Ativas (Apagar Individualmente)", expanded=True):
+        remover_chave = None
         for e, r in st.session_state["bloqueios"].items():
             for d, t in r.items():
-                st.text(f"• {e} ({d}) -> {t}")
-        if st.button("Limpar Todas as Restrições"):
+                col_r1, col_r2 = st.columns([4, 1])
+                with col_r1:
+                    st.text(f"• {e} | Dia: {d} | Estado: {t}")
+                with col_r2:
+                    if st.button("❌ Apagar", key=f"del_{e}_{d}"):
+                        remover_chave = (e, d)
+        
+        if remover_chave:
+            e_rem, d_rem = remover_chave
+            del st.session_state["bloqueios"][e_rem][d_rem]
+            if not st.session_state["bloqueios"][e_rem]:
+                del st.session_state["bloqueios"][e_rem]
+            st.success("Restrição removida com sucesso!")
+            st.rerun()
+
+        if st.button("🗑️ Limpar Todas as Restrições de Uma Vez"):
             st.session_state["bloqueios"] = {}
             st.rerun()
 
@@ -282,12 +298,11 @@ if st.button("🚀 Gerar Escala Final (Rácios e Metas Rigorosas)", type="primar
         if "Céu Peralta" in todos_enfs and escala["Céu Peralta"][d_idx] not in ["D", "L", "Au"]:
             escala["Céu Peralta"][d_idx] = "M59" if random.random() < 0.85 else "T72"
 
-        # C. Validação rigorosa de Noites (N4) -> Exatamente 5 pessoas (min 2 coordenadores)
-        # Proteção de segunda-feira pós-fim de semana
+        # C. Validação de Noites (N4) -> Proteção de segunda-feira pós-fim de semana
         if dia_sem_num == 0 and d_idx > 0:
             for e in todos_enfs:
                 if escala[e][d_idx] == "N4" and escala[e][d_idx - 1] in ["D", "L", "Au"]:
-                    escala[e][d_idx] = "D" # Reverte para descanso
+                    escala[e][d_idx] = "D"
 
     # Construção do DataFrame Final
     df_escala = pd.DataFrame(escala, index=colunas_dias).T
